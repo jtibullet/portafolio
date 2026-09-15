@@ -1,0 +1,340 @@
+                    <div className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Jensen's Alpha (α)</div>
+                    <div className={cn("text-xl font-mono font-bold", quantStats.portAlpha >= 0 ? "text-green-600" : "text-red-600")}>
+                      {(quantStats.portAlpha * 100).toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+              </>
+            )}
+
+            {/* PROBABILISTIC SCENARIOS */}
+
+            {activeTab === 'analytics' && (
+              <>
+                {/* PROBABILISTIC SCENARIOS */}
+                <div className="flex flex-col mt-8">
+                  <div className="flex justify-between items-end mb-2">
+                    <h3 className="text-xs font-mono uppercase bg-[#141414] text-[#E4E3E0] px-2 py-0.5">Probabilistic Scenarios (1 Year Horizon)</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {(() => {
+                      const mu = quantStats.optimization.optimal.expectedReturn;
+                      const sigma = quantStats.optimization.optimal.volatility;
+                      return (
+                        <>
+                          <div className="bg-white border border-red-200 border-l-4 border-l-red-600 p-4">
+                            <div className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Crisis (95% Tail)</div>
+                            <div className="text-[9px] font-mono text-zinc-400 mb-2">μ - 1.645 * σ</div>
+                            <div className="text-xl font-mono text-red-600">{((mu - 1.645 * sigma) * 100).toFixed(2)}%</div>
+                          </div>
+                          <div className="bg-white border border-orange-200 border-l-4 border-l-orange-500 p-4">
+                            <div className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Lower Expected</div>
+                            <div className="text-[9px] font-mono text-zinc-400 mb-2">μ - 1 * σ</div>
+                            <div className="text-xl font-mono text-orange-600">{((mu - 1 * sigma) * 100).toFixed(2)}%</div>
+                          </div>
+                          <div className="bg-white border border-blue-200 border-l-4 border-l-blue-500 p-4">
+                            <div className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Upper Expected</div>
+                            <div className="text-[9px] font-mono text-zinc-400 mb-2">μ + 1 * σ</div>
+                            <div className="text-xl font-mono text-blue-600">{((mu + 1 * sigma) * 100).toFixed(2)}%</div>
+                          </div>
+                          <div className="bg-white border border-green-200 border-l-4 border-l-green-600 p-4">
+                            <div className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Euphoria (95% Tail)</div>
+                            <div className="text-[9px] font-mono text-zinc-400 mb-2">μ + 1.645 * σ</div>
+                            <div className="text-xl font-mono text-green-600">{((mu + 1.645 * sigma) * 100).toFixed(2)}%</div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* ANALYST TARGETS */}
+              </>
+            )}
+
+            {activeTab === 'ai' && (
+              <>
+                {/* ANALYST TARGETS */}
+                <div className="flex flex-col mt-8 print:hidden">
+                  <button 
+                    onClick={() => setIsAnalystTargetsExpanded(!isAnalystTargetsExpanded)}
+                    className="flex justify-between items-center bg-[#141414] text-[#E4E3E0] p-3 text-xs font-mono uppercase hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">🎯 Analyst Targets & Expected Growth (Current Portfolio)</span>
+                    <span>{isAnalystTargetsExpanded ? '[-]' : '[+]'}</span>
+                  </button>
+                  {isAnalystTargetsExpanded && (
+                    <div className="bg-white border border-[#141414] border-t-0 p-4">
+                      {metadataLoading ? (
+                        <div className="flex justify-center items-center py-8">
+                          <Loader2 className="animate-spin text-zinc-400" size={32} />
+                        </div>
+                      ) : metadata && metadata.length > 0 ? (
+                        <div className="overflow-x-auto border border-zinc-200">
+                          <table className="w-full text-left text-xs font-mono">
+                            <thead className="bg-zinc-50 border-b border-zinc-200">
+                              <tr>
+                                <th className="p-2 font-bold">Ticker</th>
+                                <th className="p-2 font-bold text-right">Current Price (USD)</th>
+                                <th className="p-2 font-bold text-right">1-Year Target Price (USD)</th>
+                                <th className="p-2 font-bold text-right">Expected Growth (%)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {metadata.map((c: any, i: number) => {
+                                const isValidTarget = c.targetMeanPrice !== null && c.targetMeanPrice !== undefined && !isNaN(c.targetMeanPrice);
+                                const isValidCurrent = c.currentPrice !== null && c.currentPrice !== undefined && !isNaN(c.currentPrice);
+                                const isGrowthValid = c.expectedGrowth !== null && c.expectedGrowth !== undefined && !isNaN(c.expectedGrowth);
+                                
+                                return (
+                                  <tr key={c.symbol} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50"}>
+                                    <td className="p-2 font-bold">{c.symbol}</td>
+                                    <td className="p-2 text-right cursor-help" title="Sourced from Yahoo Finance 'price.regularMarketPrice'">{isValidCurrent ? `$${c.currentPrice.toFixed(2)}` : 'N/A'}</td>
+                                    <td className="p-2 text-right cursor-help" title="Sourced from Yahoo Finance 'financialData.targetMeanPrice' (average of analyst targets)">{isValidTarget ? `$${c.targetMeanPrice.toFixed(2)}` : 'N/A'}</td>
+                                    <td className={`p-2 text-right cursor-help ${isGrowthValid && c.expectedGrowth > 0 ? 'text-green-600' : isGrowthValid && c.expectedGrowth < 0 ? 'text-red-600' : ''}`} title="Calculated as (Target Price - Current Price) / Current Price">
+                                      {isGrowthValid ? `${c.expectedGrowth > 0 ? '+' : ''}${c.expectedGrowth.toFixed(2)}%` : 'N/A'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center text-zinc-500 italic text-sm">No analyst target data available.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* UNIVERSAL REBALANCING SIMULATOR */}
+                <div className="flex flex-col mt-8 print:hidden">
+                  <button 
+                    onClick={() => setIsRebalanceExpanded(!isRebalanceExpanded)}
+                    className="flex justify-between items-center bg-[#141414] text-[#E4E3E0] p-3 text-xs font-mono uppercase hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">⚖️ Universal Rebalancing Simulator (Cost-Adjusted)</span>
+                    <span>{isRebalanceExpanded ? '[-]' : '[+]'}</span>
+                  </button>
+                  {isRebalanceExpanded && (
+                    <div className="bg-white border border-[#141414] border-t-0 p-4">
+                      <div className="flex gap-4 mb-6">
+                        <div className="flex flex-col">
+                          <label className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Fixed Commission / Trade ($)</label>
+                          <input 
+                            type="number" 
+                            step="0.1"
+                            value={fixedCommission}
+                            onChange={(e) => setFixedCommission(Number(e.target.value))}
+                            className="border border-[#141414] p-2 text-xs font-mono w-32 focus:outline-none focus:ring-1 focus:ring-[#141414]"
+                          />
+                        </div>
+                        <div className="flex flex-col">
+                          <label className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-1">Variable Cost (%)</label>
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            value={variableCostPct}
+                            onChange={(e) => setVariableCostPct(Number(e.target.value))}
+                            className="border border-[#141414] p-2 text-xs font-mono w-32 focus:outline-none focus:ring-1 focus:ring-[#141414]"
+                          />
+                        </div>
+                      </div>
+                      
+                      {rebalanceResults.length > 0 && (
+                        <>
+                          <div className="overflow-x-auto border border-zinc-200 mb-8">
+                            <table className="w-full text-left text-xs font-mono">
+                              <thead className="bg-zinc-50 border-b border-zinc-200">
+                                <tr>
+                                  <th className="p-2 font-bold">Strategy Name</th>
+                                  <th className="p-2 font-bold text-right">Final Portfolio Value</th>
+                                  <th className="p-2 font-bold text-right">Total Costs Paid</th>
+                                  <th className="p-2 font-bold text-right">Total Trades</th>
+                                  <th className="p-2 font-bold text-right">Tracking Error</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rebalanceResults.map((r, i) => (
+                                  <tr key={r.name} className={`${i === 0 ? 'bg-green-50 border-green-200' : i % 2 !== 0 ? "bg-white" : "bg-zinc-50"}`}>
+                                    <td className="p-2 font-bold">
+                                      {r.name} {i === 0 && <span className="ml-2 text-[9px] uppercase bg-green-500 text-white px-1 py-0.5 rounded-sm">Optimal</span>}
+                                    </td>
+                                    <td className="p-2 text-right font-bold text-[#141414]">${r.finalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                    <td className="p-2 text-right text-red-600">${r.totalCosts.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                    <td className="p-2 text-right">{r.totalTrades}</td>
+                                    <td className="p-2 text-right">{(r.trackingError * 100).toFixed(2)}%</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          
+                          {driftData.length > 0 && (
+                            <div className="flex flex-col">
+                              <div className="text-[10px] uppercase tracking-tighter text-[#141414] font-bold mb-2">Weight Drift Under 'Buy & Hold' (Top 3 Assets)</div>
+                              <div className="h-[250px] w-full border border-zinc-200 p-2">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart data={driftData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                    <XAxis dataKey="date" stroke="#9ca3af" fontSize={10} tickMargin={8} minTickGap={30} />
+                                    <YAxis 
+                                      stroke="#9ca3af" 
+                                      fontSize={10} 
+                                      tickFormatter={(val) => `${val}%`}
+                                      width={40}
+                                    />
+                                    <Tooltip 
+                                      formatter={(value: number) => `${value.toFixed(2)}%`}
+                                    />
+                                    {Object.keys(driftData[0]).filter(k => k !== 'date').map((sym, idx) => (
+                                      <Line 
+                                        key={sym}
+                                        type="monotone" 
+                                        dataKey={sym} 
+                                        stroke={idx === 0 ? '#141414' : idx === 1 ? '#3b82f6' : '#ef4444'} 
+                                        strokeWidth={2}
+                                        dot={false}
+                                      />
+                                    ))}
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* AI MARKET SENTIMENT ANALYSIS */}
+                <div className="flex flex-col mt-8 print:hidden">
+                  <button 
+                    onClick={() => setIsSentimentExpanded(!isSentimentExpanded)}
+                    className="flex justify-between items-center bg-[#141414] text-[#E4E3E0] p-3 text-xs font-mono uppercase hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">📰 AI Market Sentiment Analysis (NLP)</span>
+                    <span>{isSentimentExpanded ? '[-]' : '[+]'}</span>
+                  </button>
+                  {isSentimentExpanded && (
+                    <div className="bg-white border border-[#141414] border-t-0 p-4">
+                      {sentimentLoading ? (
+                        <div className="flex justify-center items-center py-8">
+                          <Loader2 className="animate-spin text-zinc-400" size={32} />
+                        </div>
+                      ) : sentimentData && sentimentData.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {sentimentData.map((item: any) => {
+                            let colorClass = "text-zinc-500";
+                            let bgClass = "bg-zinc-100";
+                            let borderClass = "border-zinc-300";
+                            let label = "Neutral";
+                            
+                            if (item.score >= 61) {
+                              colorClass = "text-green-600";
+                              bgClass = "bg-green-100";
+                              borderClass = "border-green-300";
+                              label = "Bullish / Greed";
+                            } else if (item.score <= 39) {
+                              colorClass = "text-red-600";
+                              bgClass = "bg-red-100";
+                              borderClass = "border-red-300";
+                              label = "Bearish / Fear";
+                            }
+
+                            return (
+                              <div key={item.symbol} className={`border ${borderClass} p-4 flex flex-col`}>
+                                <div className="flex justify-between items-center mb-4">
+                                  <span className="font-bold text-lg font-mono">{item.symbol}</span>
+                                  <div className={`px-2 py-1 text-[10px] uppercase font-bold ${bgClass} ${colorClass} border ${borderClass}`}>
+                                    {label}
+                                  </div>
+                                </div>
+                                <div className="mb-4">
+                                  <div className="flex justify-between text-xs font-mono text-zinc-500 mb-1">
+                                    <span>Score</span>
+                                    <span>{item.score}/100</span>
+                                  </div>
+                                  <div className="w-full bg-zinc-200 h-2 rounded-full overflow-hidden flex">
+                                    <div 
+                                      className={`h-full ${item.score >= 61 ? 'bg-green-500' : item.score <= 39 ? 'bg-red-500' : 'bg-yellow-500'}`} 
+                                      style={{ width: `${item.score}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                                <div className="flex-1 mt-2">
+                                  <div className="text-[10px] uppercase tracking-tighter text-zinc-500 font-bold mb-2">Latest Headlines:</div>
+                                  {item.news && item.news.length > 0 ? (
+                                    <ul className="space-y-3">
+                                      {item.news.map((newsItem: any, idx: number) => (
+                                        <li key={idx} className="text-xs">
+                                          <a href={newsItem.link} target="_blank" rel="noopener noreferrer" className="hover:underline text-[#141414] font-medium block truncate">
+                                            {newsItem.title}
+                                          </a>
+                                          <span className="text-[10px] text-zinc-500">{newsItem.publisher}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <div className="text-xs text-zinc-500 italic">No recent news available.</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center text-zinc-500 italic text-sm">No sentiment data available.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* AI ASSET RECOMMENDATIONS */}
+                <div className="flex flex-col mt-8 print:hidden">
+                  <button 
+                    onClick={() => setIsRecommendationsExpanded(!isRecommendationsExpanded)}
+                    className="flex justify-between items-center bg-[#141414] text-[#E4E3E0] p-3 text-xs font-mono uppercase hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">💡 AI Asset Recommendations (Diversification & Buy The Dip)</span>
+                    <span>{isRecommendationsExpanded ? '[-]' : '[+]'}</span>
+                  </button>
+                  {isRecommendationsExpanded && (
+                    <div className="bg-white border border-[#141414] border-t-0 p-4">
+                      {isRecommendationsLoading ? (
+                        <div className="flex justify-center items-center py-8">
+                          <Loader2 className="animate-spin text-zinc-400" size={32} />
+                        </div>
+                      ) : recommendations ? (
+                        <div className="flex flex-col gap-6">
+                          <div>
+                            <h4 className="text-sm font-bold font-mono mb-2 flex items-center gap-2 text-[#141414]">🚀 Top Growth & Diversification Candidates</h4>
+                            <div className="overflow-x-auto border border-zinc-200">
+                              <table className="w-full text-left text-xs font-mono">
+                                <thead className="bg-zinc-50 border-b border-zinc-200">
+                                  <tr>
+                                    <th className="p-2 font-bold">Ticker</th>
+                                    <th className="p-2 font-bold text-right">Corr to Port</th>
+                                    <th className="p-2 font-bold text-right">Hist. Sharpe</th>
+                                    <th className="p-2 font-bold text-right">6-Mo Return</th>
+                                    <th className="p-2 font-bold text-right">1-Yr Exp Growth</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {recommendations.growth.length > 0 ? recommendations.growth.map((c: any, i: number) => (
+                                    <tr key={c.symbol} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50"}>
+                                      <td className="p-2 font-bold">{c.symbol}</td>
+                                      <td className="p-2 text-right cursor-help" title="Pearson correlation between this asset's historical returns and the currently optimized portfolio's daily returns">{c.correlation.toFixed(2)}</td>
+                                      <td className="p-2 text-right text-green-600 cursor-help" title="Calculated as (Ann. Return - Risk Free Rate) / Ann. Volatility based on historical daily log returns">{c.sharpe.toFixed(2)}</td>
+                                      <td className="p-2 text-right cursor-help" title="Calculated as percentage change in adjusted close price over the trailing 6 months">{(c.sixMonthReturn * 100).toFixed(2)}%</td>
+                                      <td className="p-2 text-right text-green-600 cursor-help" title="Calculated as (Analyst 1-Year Target Price - Current Price) / Current Price via Yahoo Finance">{(c.expectedGrowth * 100).toFixed(2)}%</td>
+                                    </tr>
+                                  )) : (
+                                    <tr><td colSpan={5} className="p-4 text-center text-zinc-500 italic">No candidates met the criteria.</td></tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>

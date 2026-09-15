@@ -1,0 +1,6 @@
+{
+  "name": "Quant Portfolio App",
+  "description": "Institutional-grade quantitative finance web application Phase 1.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
