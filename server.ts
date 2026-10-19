@@ -3,16 +3,27 @@ dns.setDefaultResultOrder("ipv4first");
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
-import vm from "node:vm";
 import YahooFinanceRaw from "yahoo-finance2";
 import Database from "better-sqlite3";
-import fs from "fs";
 import { subYears, subMonths, format } from "date-fns";
 
 const YahooFinance = (YahooFinanceRaw as any).default || YahooFinanceRaw;
-const yfOptions = { validation: { logErrors: false } };const yahooFinance = typeof YahooFinance === 'function' ? new YahooFinance(yfOptions) : new YahooFinance.default(yfOptions);
-yahooFinance.suppressNotices = true;
+const yfOptions = { validation: { logErrors: false }, suppressNotices: ['yahooSurvey'] };
+const yahooFinance = typeof YahooFinance === 'function' ? new YahooFinance(yfOptions) : new YahooFinance.default(yfOptions);
+
+// Set to true by the production esbuild bundle (see "build" in package.json)
+declare const IS_PROD_BUILD: boolean | undefined;
+const isProduction = process.env.NODE_ENV === "production" || (typeof IS_PROD_BUILD !== "undefined" && IS_PROD_BUILD);
+
+// Limits on client-supplied input so a single request can't trigger unbounded Yahoo Finance calls
+const MAX_TICKERS = 20;
+const SYMBOL_PATTERN = /^[A-Za-z0-9.\-=^]{1,20}$/;
+
+function parseSymbols(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_TICKERS) return null;
+  if (!value.every(v => typeof v === "string" && SYMBOL_PATTERN.test(v))) return null;
+  return Array.from(new Set(value as string[]));
+}
 
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
@@ -21,7 +32,9 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('UNHANDLED REJECTION:', reason);
 });
 
-let db;
+// If the database can't be opened, the app still runs; only saving/loading portfolios is disabled.
+// The file is never deleted automatically so saved portfolios are not lost.
+let db: Database.Database | null = null;
 try {
   db = new Database("portfolios.db");
   db.exec(`
@@ -37,30 +50,13 @@ try {
     )
   `);
 } catch (err) {
-  console.error("Failed to open portfolios.db, recreating it...", err);
-  try { if (db) db.close(); } catch(e) {}
-  try { if (fs.existsSync("portfolios.db")) fs.unlinkSync("portfolios.db"); } catch(e) {}
-  try { if (fs.existsSync("portfolios.db-wal")) fs.unlinkSync("portfolios.db-wal"); } catch(e) {}
-  try { if (fs.existsSync("portfolios.db-shm")) fs.unlinkSync("portfolios.db-shm"); } catch(e) {}
-  
-  db = new Database("portfolios.db");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS portfolios (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      tickers TEXT,
-      riskFreeRate REAL,
-      expectedReturn REAL,
-      volatility REAL,
-      sharpeRatio REAL,
-      weights TEXT
-    )
-  `);
+  console.error("Failed to open portfolios.db; saved portfolios are disabled until it is fixed or moved aside.", err);
+  db = null;
 }
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -79,8 +75,14 @@ async function startServer() {
   });
 
   app.post("/api/portfolios", (req, res) => {
+    if (!db) return res.status(503).json({ error: "Portfolio database is unavailable" });
     try {
       const { tickers, riskFreeRate, expectedReturn, volatility, sharpeRatio, weights } = req.body;
+      const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+      if (!parseSymbols(tickers) || !Array.isArray(weights) || weights.length !== tickers.length || !weights.every(isNum)
+          || ![riskFreeRate, expectedReturn, volatility, sharpeRatio].every(isNum)) {
+        return res.status(400).json({ error: "Invalid portfolio payload" });
+      }
       const stmt = db.prepare(`
         INSERT INTO portfolios (tickers, riskFreeRate, expectedReturn, volatility, sharpeRatio, weights)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -101,6 +103,7 @@ async function startServer() {
   });
 
   app.get("/api/portfolios", (req, res) => {
+    if (!db) return res.json({ portfolios: [] });
     try {
       const stmt = db.prepare("SELECT * FROM portfolios ORDER BY timestamp DESC");
       const rows = stmt.all();
@@ -120,7 +123,14 @@ async function startServer() {
   
   app.post("/api/historical", async (req, res) => {
     try {
-      const { tickers, benchmark, horizonYears } = req.body;
+      const { benchmark, horizonYears } = req.body;
+      const tickers = parseSymbols(req.body.tickers);
+      if (!tickers || typeof benchmark !== "string" || !SYMBOL_PATTERN.test(benchmark)) {
+        return res.status(400).json({ error: `Provide 1-${MAX_TICKERS} valid tickers and a valid benchmark` });
+      }
+      if (!Number.isInteger(horizonYears) || horizonYears < 1 || horizonYears > 20) {
+        return res.status(400).json({ error: "horizonYears must be an integer between 1 and 20" });
+      }
       
       const allSymbols = Array.from(new Set([...tickers, benchmark]));
       
@@ -223,7 +233,10 @@ async function startServer() {
 
   app.post("/api/metadata", async (req, res) => {
     try {
-      const { tickers } = req.body;
+      const tickers = parseSymbols(req.body.tickers);
+      if (!tickers) {
+        return res.status(400).json({ error: `Provide 1-${MAX_TICKERS} valid tickers` });
+      }
       const promises = tickers.map(async (symbol: any) => {
         try {
           let price: any = {};
@@ -462,7 +475,10 @@ async function startServer() {
       if (!tickers || typeof tickers !== "string") {
         return res.status(400).json({ error: "tickers query parameter is required" });
       }
-      const symbols = tickers.split(",");
+      const symbols = parseSymbols(tickers.split(","));
+      if (!symbols) {
+        return res.status(400).json({ error: `Provide 1-${MAX_TICKERS} valid tickers` });
+      }
       const sentiment = (await import('vader-sentiment')).default;
       
       const results = [];
@@ -544,7 +560,7 @@ async function startServer() {
 
   
 
-  if (process.env.NODE_ENV !== "production") {
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

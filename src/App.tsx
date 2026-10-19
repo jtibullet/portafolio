@@ -266,6 +266,9 @@ export default function App() {
         if (data.portfolios) {
           setSavedPortfolios(data.portfolios);
         }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(`Failed to save portfolio${data.error ? `: ${data.error}` : ''}`);
       }
     } catch (err) {
       console.error('Failed to save portfolio', err);
@@ -681,7 +684,10 @@ export default function App() {
       const benchVol = Math.sqrt(variance(benchReturns) * 252);
       const benchVar = benchVol * benchVol;
       
-      const delta = benchVar > 0 ? (quantStats.benchAnnReturn - riskFreeRate) / benchVar : 2.5; 
+      // Implied risk aversion; a benchmark that underperformed the risk-free rate gives δ <= 0,
+      // which would make implied priors fall as risk rises, so use the standard δ = 2.5 instead
+      const impliedDelta = benchVar > 0 ? (quantStats.benchAnnReturn - riskFreeRate) / benchVar : NaN;
+      const delta = Number.isFinite(impliedDelta) && impliedDelta > 0 ? impliedDelta : 2.5;
       
       const viewsArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.view ?? 0);
       const confArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.conf ?? 0.5);

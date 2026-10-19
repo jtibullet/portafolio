@@ -28,7 +28,8 @@ def fetch_historical_data(tickers: list, benchmark: str, horizon_years: int) -> 
     # 1. Ticker Validation & API Safety
     for symbol in all_symbols:
         try:
-            df = yf.download(symbol, start=start_date, end=end_date, progress=False)
+            df = yf.download(symbol, start=start_date, end=end_date, progress=False,
+                             auto_adjust=False, multi_level_index=False)
             if df.empty or 'Adj Close' not in df.columns or df['Adj Close'].dropna().empty:
                 st.warning(f"Warning: Data for '{symbol}' is invalid, missing, or delisted. It will be excluded from the analysis.")
             else:
@@ -59,7 +60,7 @@ def fetch_exchange_rate(symbol: str = 'CLP=X') -> Optional[float]:
     Returns None if the rate cannot be retrieved.
     """
     try:
-        df = yf.download(symbol, period='5d', progress=False)
+        df = yf.download(symbol, period='5d', progress=False, multi_level_index=False)
         if df.empty or 'Close' not in df.columns:
             return None
         closes = df['Close'].squeeze().dropna()

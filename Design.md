@@ -4,12 +4,12 @@
 The application strictly adheres to a modular architecture translated for the web stack (React/Vite/Express):
 - **`server.ts`**: Express backend entry point. Handles API extraction (Yahoo Finance) for historical prices and exchange rates, including robust error handling.
 - **`src/App.tsx`**: Main React UI component. Contains sidebar layout elements (tickers, benchmark, horizon) and displays tables/metrics.
-- **`src/quantMath.ts`**: Quantitative Math Module. Contains core statistical and financial logic (translated from Python numpy/scipy).
+- **`src/utils/quantMath.ts`**: Quantitative Math Module. Contains core statistical and financial logic (translated from Python numpy/scipy).
 
 ## Phase 1: Project Setup & Historical Data Extraction
 - **Inputs**: Up to 7 assets, 1 benchmark, time horizon (1, 3, 5 years).
 - **Data Fetched**: Daily Adjusted Close prices.
-- **Missing Data Handling**: Forward fill (`ffill`) followed by backward fill (`bfill`) to ensure alignment and prevent NaN-related math errors.
+- **Missing Data Handling**: Dates are aligned on the union of trading days and missing prices are kept as `null` (no forward/backward fill); statistics use pairwise deletion.
 - **Exchange Rate**: Current USD/CLP rate fetched via `CLP=X`.
 - **Data Verification**: Raw data (head and tail) displayed in the main UI for visual verification.
 
