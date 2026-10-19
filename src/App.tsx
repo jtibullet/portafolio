@@ -328,12 +328,14 @@ export default function App() {
       const expectedReturn = quantStats.optimization.optimal.expectedReturn;
       const volatility = quantStats.optimization.optimal.volatility;
       
+      let cancelled = false;
       const runMC = async () => {
         setMcResult(null); // Show loading state if needed
         const result = await runMonteCarlo(mcInitialAmount, expectedReturn, volatility, mcYears);
-        setMcResult(result);
+        if (!cancelled) setMcResult(result);
       };
       runMC();
+      return () => { cancelled = true; };
     }
   }, [activeTab, quantStats, mcYears, mcInitialAmount]);
 
@@ -381,6 +383,7 @@ export default function App() {
   useEffect(() => {
     if (!historicalData || historicalData.length === 0 || symbols.length === 0) {
       setQuantStats(null);
+      setIsOptimizing(false);
       return;
     }
 
@@ -393,7 +396,14 @@ export default function App() {
     }
 
     const benchReturns = returnsBySymbol[selectedBenchmark];
-    if (!benchReturns) return;
+    if (!benchReturns) {
+      setQuantStats(null);
+      setIsOptimizing(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsOptimizing(true);
 
     const benchMeanDaily = mean(benchReturns);
     const benchAnnReturn = benchMeanDaily * 252;
@@ -454,7 +464,11 @@ export default function App() {
           const forecast = calculateARIMA111(validPrices, 252);
           forecast.symbol = sym;
           forecasts[sym] = forecast;
-          expectedReturns[i] = forecast.expectedReturn;
+          // ARIMA yields a simple 1-year return; convert to log return to match the
+          // annualized log returns used everywhere else (a forecast of -100% or worse can't be logged)
+          if (forecast.expectedReturn > -1) {
+            expectedReturns[i] = Math.log1p(forecast.expectedReturn);
+          }
         } catch (e) {
           console.log(`ARIMA forecast failed for ${sym}, falling back to historical mean.`, e);
           // fallback is already in expectedReturns[i]
@@ -511,7 +525,6 @@ export default function App() {
       let portDailyReturns: (number | null)[] = [];
 
       try {
-        // setIsOptimizing is already true
         const maxWeightsArr = matrixSymbols.map(sym => maxWeights[sym] !== undefined ? maxWeights[sym] : 1.0);
         const minWeightsArr = matrixSymbols.map(sym => minWeights[sym] !== undefined ? minWeights[sym] : 0.05);
         opt = await optimizePortfolio(expectedReturns, covMatrix, riskFreeRate, 100000, undefined, maxWeightsArr, minWeightsArr);
@@ -539,6 +552,9 @@ export default function App() {
         console.log("Could not optimize portfolio", e);
       }
 
+      // A newer run superseded this one; drop the stale result
+      if (cancelled) return;
+
       setQuantStats({
         assetStats,
         matrixSymbols,
@@ -556,6 +572,7 @@ export default function App() {
       setIsOptimizing(false);
     };
     calculateOpt();
+    return () => { cancelled = true; };
   }, [marketData, riskFreeRate, selectedTickers, selectedBenchmark, useArimaForecast, maxWeights, minWeights]);
 
   // Initialize Views Data
@@ -659,8 +676,10 @@ export default function App() {
       
       const delta = benchVar > 0 ? (quantStats.benchAnnReturn - riskFreeRate) / benchVar : 2.5; 
       
-      const viewsArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.view || 0);
-      const confArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.conf || 0.5);
+      const viewsArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.view ?? 0);
+      const confArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.conf ?? 0.5);
+
+      let cancelled = false;
       
       const calculateBL = async () => {
         try {
@@ -678,6 +697,7 @@ export default function App() {
           
           const portDailyVol = blOpt.optimal.volatility / Math.sqrt(252);
           const stress = simulateBlackSwan(portDailyVol, 1000, 3);
+          if (cancelled) return;
           
           setBlStats({
             pi,
@@ -691,6 +711,7 @@ export default function App() {
         }
       };
       calculateBL();
+      return () => { cancelled = true; };
     } catch (err) {
       console.log("BL Error", err);
     }

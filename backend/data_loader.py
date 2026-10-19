@@ -7,6 +7,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import datetime
+from typing import Optional
 
 @st.cache_data(show_spinner=False)
 def fetch_historical_data(tickers: list, benchmark: str, horizon_years: int) -> pd.DataFrame:
@@ -49,3 +50,21 @@ def fetch_historical_data(tickers: list, benchmark: str, horizon_years: int) -> 
         st.stop()
         
     return adj_close
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_exchange_rate(symbol: str = 'CLP=X') -> Optional[float]:
+    """
+    Fetches the latest close for a Yahoo Finance FX pair (e.g. 'CLP=X' = CLP per 1 USD).
+    Used to convert portfolio capital between USD and CLP.
+    Returns None if the rate cannot be retrieved.
+    """
+    try:
+        df = yf.download(symbol, period='5d', progress=False)
+        if df.empty or 'Close' not in df.columns:
+            return None
+        closes = df['Close'].squeeze().dropna()
+        if closes.empty:
+            return None
+        return float(closes.iloc[-1])
+    except Exception:
+        return None

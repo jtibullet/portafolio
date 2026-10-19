@@ -22,7 +22,10 @@ def main():
     with st.spinner("Fetching exchange rate..."):
         usd_clp_rate = fetch_exchange_rate('CLP=X')
         
-    st.metric(label="Current USD/CLP Exchange Rate", value=f"${usd_clp_rate:,.2f}")
+    if usd_clp_rate is not None:
+        st.metric(label="Current USD/CLP Exchange Rate", value=f"${usd_clp_rate:,.2f}")
+    else:
+        st.warning("Could not fetch the USD/CLP exchange rate.")
 
     # 3. Data Extraction Pipeline
     if not selected_tickers:
