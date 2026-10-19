@@ -49,15 +49,27 @@ export async function optimizePortfolio(
     throw new Error(`Minimum weight constraints (sum = ${(sumMinWeights*100).toFixed(1)}%) exceed 100%.`);
   }
 
-  let maxSharpe = -Infinity;
-  let bestWeights: number[] = new Array(n).fill(1/n);
-  // Ensure bestWeights satisfy minimum bounds (simple fix)
-  let bestSum = 0;
+  const maxW = maxWeights || new Array(n).fill(1);
+  let sumMaxWeights = 0;
   for (let j = 0; j < n; j++) {
-    bestWeights[j] = Math.max(minW[j], bestWeights[j]);
-    bestSum += bestWeights[j];
+    if (minW[j] > maxW[j]) {
+      throw new Error(`Minimum weight (${(minW[j]*100).toFixed(1)}%) exceeds maximum weight (${(maxW[j]*100).toFixed(1)}%) for asset ${j + 1}.`);
+    }
+    sumMaxWeights += maxW[j];
   }
-  for(let j = 0; j < n; j++) bestWeights[j] /= bestSum;
+  if (sumMaxWeights < 1 - 1e-9) {
+    throw new Error(`Maximum weight constraints (sum = ${(sumMaxWeights*100).toFixed(1)}%) are below 100%; the portfolio cannot be fully invested.`);
+  }
+
+  let maxSharpe = -Infinity;
+  // Feasible starting point: equal weights if they fit the bounds, otherwise fill each
+  // asset's [min, max] range proportionally to its capacity (always sums to 1 given the checks above)
+  let bestWeights: number[] = new Array(n).fill(1/n);
+  if (bestWeights.some((w, j) => w < minW[j] || w > maxW[j])) {
+    const capacity = maxW.map((m, j) => m - minW[j]);
+    const totalCapacity = capacity.reduce((a, b) => a + b, 0);
+    bestWeights = minW.map((m, j) => m + (totalCapacity > 0 ? capacity[j] * remainingWeight / totalCapacity : 0));
+  }
 
   let bestReturn = 0;
   let bestVol = 0;

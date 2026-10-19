@@ -118,6 +118,7 @@ export default function App() {
   
   const { data: marketData, isLoading: isFetching, error, fetchData: fetchMarketData, setError } = useMarketData();
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const dataLoading = isFetching || isOptimizing;
   const historicalData = marketData?.historicalData || null;
   const symbols = marketData?.symbols || [];
@@ -265,6 +266,9 @@ export default function App() {
         if (data.portfolios) {
           setSavedPortfolios(data.portfolios);
         }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(`Failed to save portfolio${data.error ? `: ${data.error}` : ''}`);
       }
     } catch (err) {
       console.error('Failed to save portfolio', err);
@@ -328,12 +332,14 @@ export default function App() {
       const expectedReturn = quantStats.optimization.optimal.expectedReturn;
       const volatility = quantStats.optimization.optimal.volatility;
       
+      let cancelled = false;
       const runMC = async () => {
         setMcResult(null); // Show loading state if needed
         const result = await runMonteCarlo(mcInitialAmount, expectedReturn, volatility, mcYears);
-        setMcResult(result);
+        if (!cancelled) setMcResult(result);
       };
       runMC();
+      return () => { cancelled = true; };
     }
   }, [activeTab, quantStats, mcYears, mcInitialAmount]);
 
@@ -381,6 +387,8 @@ export default function App() {
   useEffect(() => {
     if (!historicalData || historicalData.length === 0 || symbols.length === 0) {
       setQuantStats(null);
+      setOptimizationError(null);
+      setIsOptimizing(false);
       return;
     }
 
@@ -393,7 +401,15 @@ export default function App() {
     }
 
     const benchReturns = returnsBySymbol[selectedBenchmark];
-    if (!benchReturns) return;
+    if (!benchReturns) {
+      setQuantStats(null);
+      setOptimizationError(null);
+      setIsOptimizing(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsOptimizing(true);
 
     const benchMeanDaily = mean(benchReturns);
     const benchAnnReturn = benchMeanDaily * 252;
@@ -454,7 +470,11 @@ export default function App() {
           const forecast = calculateARIMA111(validPrices, 252);
           forecast.symbol = sym;
           forecasts[sym] = forecast;
-          expectedReturns[i] = forecast.expectedReturn;
+          // ARIMA yields a simple 1-year return; convert to log return to match the
+          // annualized log returns used everywhere else (a forecast of -100% or worse can't be logged)
+          if (forecast.expectedReturn > -1) {
+            expectedReturns[i] = Math.log1p(forecast.expectedReturn);
+          }
         } catch (e) {
           console.log(`ARIMA forecast failed for ${sym}, falling back to historical mean.`, e);
           // fallback is already in expectedReturns[i]
@@ -509,9 +529,9 @@ export default function App() {
       let portCAPM = 0;
       let portAlpha = 0;
       let portDailyReturns: (number | null)[] = [];
+      let optError: string | null = null;
 
       try {
-        // setIsOptimizing is already true
         const maxWeightsArr = matrixSymbols.map(sym => maxWeights[sym] !== undefined ? maxWeights[sym] : 1.0);
         const minWeightsArr = matrixSymbols.map(sym => minWeights[sym] !== undefined ? minWeights[sym] : 0.05);
         opt = await optimizePortfolio(expectedReturns, covMatrix, riskFreeRate, 100000, undefined, maxWeightsArr, minWeightsArr);
@@ -535,9 +555,15 @@ export default function App() {
           }
           portDailyReturns.push(valid ? r : null);
         }
-      } catch (e) {
+      } catch (e: any) {
         console.log("Could not optimize portfolio", e);
+        optError = e?.message || "Could not optimize portfolio.";
       }
+
+      // A newer run superseded this one; drop the stale result
+      if (cancelled) return;
+
+      setOptimizationError(optError);
 
       setQuantStats({
         assetStats,
@@ -556,6 +582,7 @@ export default function App() {
       setIsOptimizing(false);
     };
     calculateOpt();
+    return () => { cancelled = true; };
   }, [marketData, riskFreeRate, selectedTickers, selectedBenchmark, useArimaForecast, maxWeights, minWeights]);
 
   // Initialize Views Data
@@ -657,10 +684,15 @@ export default function App() {
       const benchVol = Math.sqrt(variance(benchReturns) * 252);
       const benchVar = benchVol * benchVol;
       
-      const delta = benchVar > 0 ? (quantStats.benchAnnReturn - riskFreeRate) / benchVar : 2.5; 
+      // Implied risk aversion; a benchmark that underperformed the risk-free rate gives δ <= 0,
+      // which would make implied priors fall as risk rises, so use the standard δ = 2.5 instead
+      const impliedDelta = benchVar > 0 ? (quantStats.benchAnnReturn - riskFreeRate) / benchVar : NaN;
+      const delta = Number.isFinite(impliedDelta) && impliedDelta > 0 ? impliedDelta : 2.5;
       
-      const viewsArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.view || 0);
-      const confArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.conf || 0.5);
+      const viewsArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.view ?? 0);
+      const confArr = quantStats.matrixSymbols.map((sym: string) => viewsData[sym]?.conf ?? 0.5);
+
+      let cancelled = false;
       
       const calculateBL = async () => {
         try {
@@ -678,6 +710,7 @@ export default function App() {
           
           const portDailyVol = blOpt.optimal.volatility / Math.sqrt(252);
           const stress = simulateBlackSwan(portDailyVol, 1000, 3);
+          if (cancelled) return;
           
           setBlStats({
             pi,
@@ -691,6 +724,7 @@ export default function App() {
         }
       };
       calculateBL();
+      return () => { cancelled = true; };
     } catch (err) {
       console.log("BL Error", err);
     }
@@ -1191,6 +1225,12 @@ export default function App() {
         {error && (
           <div className="bg-white border border-[#141414] text-red-700 px-4 py-3 mb-8 font-mono text-xs">
             ERROR: {error}
+          </div>
+        )}
+
+        {optimizationError && (
+          <div className="bg-white border border-[#141414] text-red-700 px-4 py-3 mb-8 font-mono text-xs">
+            OPTIMIZATION ERROR: {optimizationError}
           </div>
         )}
 

@@ -14,9 +14,13 @@ export interface MonteCarloResult {
   finalValues: number[]; // All 10,000 final values for histogram
 }
 
+/**
+ * @param expectedAnnualLogReturn Annualized mean of daily log returns (mean * 252).
+ *   This is already the GBM log drift (mu - sigma^2/2), so no Ito correction is applied here.
+ */
 export async function runMonteCarlo(
   initialInvestment: number,
-  expectedAnnualReturn: number,
+  expectedAnnualLogReturn: number,
   annualVolatility: number,
   years: number,
   numSimulations: number = 10000,
@@ -29,7 +33,7 @@ export async function runMonteCarlo(
   const dt = 1 / 252;
   const steps = Math.floor(years * 252);
   
-  const drift = (expectedAnnualReturn - 0.5 * annualVolatility * annualVolatility) * dt;
+  const drift = expectedAnnualLogReturn * dt;
   const vol = annualVolatility * Math.sqrt(dt);
 
   const finalValues = new Float64Array(numSimulations);

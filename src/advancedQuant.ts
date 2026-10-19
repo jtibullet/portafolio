@@ -1,4 +1,4 @@
-import { variance } from './utils/quantMath';
+import { variance, mulberry32 } from './utils/quantMath';
 
 // --- Matrix Math ---
 export function multiply(a: number[][], b: number[][]): number[][] {
@@ -120,34 +120,38 @@ export function calculateBlackLitterman(
 }
 
 // --- Synthetic Stress (Black Swan) ---
-function boxMuller(): number {
+function boxMuller(rand: () => number): number {
   let u = 0, v = 0;
-  while(u === 0) u = Math.random();
-  while(v === 0) v = Math.random();
+  while(u === 0) u = rand();
+  while(v === 0) v = rand();
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
-function chiSquare(df: number): number {
+function chiSquare(df: number, rand: () => number): number {
   let sum = 0;
   for(let i = 0; i < df; i++) {
-    const z = boxMuller();
+    const z = boxMuller(rand);
     sum += z * z;
   }
   return sum;
 }
 
-function studentT(df: number): number {
-  const z = boxMuller();
-  const v = chiSquare(df);
+function studentT(df: number, rand: () => number): number {
+  const z = boxMuller(rand);
+  const v = chiSquare(df, rand);
   return z / Math.sqrt(v / df);
 }
 
 export function simulateBlackSwan(
   portfolioDailyVolatility: number,
   numDays: number = 1000,
-  df: number = 3
+  df: number = 3,
+  seed: number = 42
 ) {
-  const scale = portfolioDailyVolatility / Math.sqrt(3);
+  // Deterministic, local PRNG so results are repeatable and don't disturb the Monte Carlo seed
+  const rand = mulberry32(seed);
+  // Var(t_df) = df / (df - 2), so rescale to match the target daily volatility (undefined for df <= 2)
+  const scale = df > 2 ? portfolioDailyVolatility / Math.sqrt(df / (df - 2)) : portfolioDailyVolatility;
   
   const returns: number[] = [];
   let cumulative = 1;
@@ -155,7 +159,7 @@ export function simulateBlackSwan(
   let peak = 1;
   
   for (let i = 0; i < numDays; i++) {
-    const tVal = studentT(df);
+    const tVal = studentT(df, rand);
     let dailyReturn = (tVal * scale) - 0.0005; 
     if (dailyReturn < -0.99) dailyReturn = -0.99;
     
