@@ -118,6 +118,7 @@ export default function App() {
   
   const { data: marketData, isLoading: isFetching, error, fetchData: fetchMarketData, setError } = useMarketData();
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const dataLoading = isFetching || isOptimizing;
   const historicalData = marketData?.historicalData || null;
   const symbols = marketData?.symbols || [];
@@ -383,6 +384,7 @@ export default function App() {
   useEffect(() => {
     if (!historicalData || historicalData.length === 0 || symbols.length === 0) {
       setQuantStats(null);
+      setOptimizationError(null);
       setIsOptimizing(false);
       return;
     }
@@ -398,6 +400,7 @@ export default function App() {
     const benchReturns = returnsBySymbol[selectedBenchmark];
     if (!benchReturns) {
       setQuantStats(null);
+      setOptimizationError(null);
       setIsOptimizing(false);
       return;
     }
@@ -523,6 +526,7 @@ export default function App() {
       let portCAPM = 0;
       let portAlpha = 0;
       let portDailyReturns: (number | null)[] = [];
+      let optError: string | null = null;
 
       try {
         const maxWeightsArr = matrixSymbols.map(sym => maxWeights[sym] !== undefined ? maxWeights[sym] : 1.0);
@@ -548,12 +552,15 @@ export default function App() {
           }
           portDailyReturns.push(valid ? r : null);
         }
-      } catch (e) {
+      } catch (e: any) {
         console.log("Could not optimize portfolio", e);
+        optError = e?.message || "Could not optimize portfolio.";
       }
 
       // A newer run superseded this one; drop the stale result
       if (cancelled) return;
+
+      setOptimizationError(optError);
 
       setQuantStats({
         assetStats,
@@ -1212,6 +1219,12 @@ export default function App() {
         {error && (
           <div className="bg-white border border-[#141414] text-red-700 px-4 py-3 mb-8 font-mono text-xs">
             ERROR: {error}
+          </div>
+        )}
+
+        {optimizationError && (
+          <div className="bg-white border border-[#141414] text-red-700 px-4 py-3 mb-8 font-mono text-xs">
+            OPTIMIZATION ERROR: {optimizationError}
           </div>
         )}
 
