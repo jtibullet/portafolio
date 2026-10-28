@@ -12,7 +12,7 @@ import {
   Cell
 } from 'recharts';
 import { interpolatePlasma } from 'd3-scale-chromatic';
-import { OptimizationResult, FrontierPoint } from '../optimization';
+import { OptimizationResult, FrontierPoint } from '../../optimization';
 
 export interface EfficientFrontierProps {
   optimization: {
