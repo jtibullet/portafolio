@@ -25,6 +25,12 @@ export interface FrontierPoint {
   expectedReturn: number;
 }
 
+export interface PortfolioOptimization {
+  optimal: OptimizationResult;
+  frontier: FrontierPoint[];
+  simulated: SimulatedPortfolio[];
+}
+
 export async function optimizePortfolio(
   expectedReturns: number[],
   covMatrix: number[][],
@@ -33,7 +39,7 @@ export async function optimizePortfolio(
   onProgress?: (progress: number) => void,
   maxWeights?: number[],
   minWeights?: number[]
-): Promise<{ optimal: OptimizationResult, frontier: FrontierPoint[], simulated: SimulatedPortfolio[] }> {
+): Promise<PortfolioOptimization> {
   const n = expectedReturns.length;
   
   // Create an array of minWeights, defaulting to 0.05 if not provided or empty

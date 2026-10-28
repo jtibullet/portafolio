@@ -35,7 +35,20 @@ npm start
 
 ```bash
 npm run lint   # TypeScript type check
+npm test       # Unit tests (Vitest)
 ```
+
+GitHub Actions runs the type check, tests and build on every pull request.
+
+## Code layout
+
+| Path | Contents |
+|---|---|
+| `src/engine/` | Pure analysis pipeline: statistics, optimization inputs, Black-Litterman, recommendations, chart data |
+| `src/utils/quantMath.ts`, `src/optimization.ts`, `src/advancedQuant.ts`, `src/monteCarlo.ts` | Core math |
+| `src/hooks/` | React state: parameters, market data, analysis, server data, UI state |
+| `src/components/<tab>/` | One folder per tab (`dashboard`, `analytics`, `ai`, `validation`), plus `layout` and shared `ui` |
+| `server.ts` | Express API (Yahoo Finance, SQLite) and static hosting |
 
 ## Legacy Python prototype (optional)
 

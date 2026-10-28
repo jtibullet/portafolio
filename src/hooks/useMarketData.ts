@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { calculateLogReturns } from '../utils/quantMath';
+import type { PriceRow } from '../types';
 
 export interface MarketDataState {
-  historicalData: any[];
+  historicalData: PriceRow[];
   symbols: string[];
   pricesBySymbol: Record<string, (number | null)[]>;
   returnsBySymbol: Record<string, (number | null)[]>;
