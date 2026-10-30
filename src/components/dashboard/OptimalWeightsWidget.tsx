@@ -11,7 +11,7 @@ const PIE_COLORS = [
 
 export function OptimalWeightsWidget({ quantStats }: { quantStats: QuantStats }) {
   const { t, f } = useI18n();
-  const weights = quantStats.optimization!.optimal.weights;
+  const { weights, method } = quantStats.optimization!.optimal;
   const data = quantStats.matrixSymbols
     .map((sym, i) => ({ name: sym, value: weights[i] }))
     .sort((a, b) => b.value - a.value);
@@ -21,6 +21,9 @@ export function OptimalWeightsWidget({ quantStats }: { quantStats: QuantStats })
       <div className="flex justify-between items-end mb-2">
         <SectionTitle>{t('weights.title')}</SectionTitle>
       </div>
+      {method === 'minVariance' && (
+        <p className="text-[10px] font-mono text-orange-600 px-2 pb-2">{t('weights.minVariance')}</p>
+      )}
       <div className="flex-1 bg-white border border-ink p-4 flex flex-col md:flex-row items-center justify-between min-h-[300px]">
         <div className="w-full md:w-1/2 mb-4 md:mb-0">
           <table className="w-full text-left border-collapse text-xs font-mono">

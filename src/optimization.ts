@@ -1,10 +1,11 @@
 /**
  * Portfolio Optimization Module
- * Uses Monte Carlo simulation to find the optimal portfolio weights
- * maximizing the Sharpe ratio with constraints:
- * - sum(w) = 1
- * - w_i >= 0.05
+ *
+ * Finds the long-only, fully invested portfolio with the highest Sharpe ratio under per-asset
+ * weight bounds by solving a quadratic program exactly (Goldfarb-Idnani, via quadprog).
+ * The efficient frontier is traced with minimum-variance QPs at increasing target returns.
  */
+import { solveQuadratic, QPInfeasibleError } from './qp';
 
 export interface SimulatedPortfolio {
   weights: number[];
@@ -18,6 +19,11 @@ export interface OptimizationResult {
   expectedReturn: number;
   volatility: number;
   sharpeRatio: number;
+  /**
+   * 'maxSharpe' normally. 'minVariance' when no allowed portfolio beats the risk-free rate,
+   * so the Sharpe ratio has no meaningful maximum and the least risky portfolio is returned.
+   */
+  method: 'maxSharpe' | 'minVariance';
 }
 
 export interface FrontierPoint {
@@ -45,198 +51,205 @@ export interface PortfolioOptimization {
   simulated: SimulatedPortfolio[];
 }
 
-export async function optimizePortfolio(
+const FRONTIER_POINTS = 40;
+const DEFAULT_MIN_WEIGHT = 0.05;
+
+function portfolioStats(weights: number[], mu: number[], cov: number[][]) {
+  let ret = 0;
+  let variance = 0;
+  for (let i = 0; i < weights.length; i++) {
+    ret += weights[i] * mu[i];
+    for (let j = 0; j < weights.length; j++) variance += weights[i] * cov[i][j] * weights[j];
+  }
+  return { expectedReturn: ret, volatility: Math.sqrt(Math.max(variance, 0)) };
+}
+
+/**
+ * Sample covariance with pairwise deletion is not always positive definite, which the QP solver
+ * requires. A ridge of 1e-8 x the average variance fixes that without visibly changing results.
+ */
+function regularize(cov: number[][]) {
+  const n = cov.length;
+  const avgVar = cov.reduce((s, row, i) => s + row[i], 0) / n || 1;
+  return cov.map((row, i) => row.map((v, j) => (i === j ? v + 1e-8 * avgVar : (v + cov[j][i]) / 2)));
+}
+
+export function validateBounds(minW: number[], maxW: number[]) {
+  const sumMin = minW.reduce((a, b) => a + b, 0);
+  if (sumMin > 1 + 1e-9) {
+    throw new ConstraintError(`Minimum weight constraints (sum = ${(sumMin * 100).toFixed(1)}%) exceed 100%.`, 'minSum', { sum: sumMin });
+  }
+  for (let j = 0; j < minW.length; j++) {
+    if (minW[j] > maxW[j]) {
+      throw new ConstraintError(`Minimum weight (${(minW[j] * 100).toFixed(1)}%) exceeds maximum weight (${(maxW[j] * 100).toFixed(1)}%) for asset ${j + 1}.`, 'minAboveMax', { assetIndex: j, min: minW[j], max: maxW[j] });
+    }
+  }
+  const sumMax = maxW.reduce((a, b) => a + b, 0);
+  if (sumMax < 1 - 1e-9) {
+    throw new ConstraintError(`Maximum weight constraints (sum = ${(sumMax * 100).toFixed(1)}%) are below 100%; the portfolio cannot be fully invested.`, 'maxSum', { sum: sumMax });
+  }
+}
+
+/** Box constraints lb ≤ w ≤ ub written as a·w ≥ b rows. */
+function boxConstraints(lb: number[], ub: number[]) {
+  const n = lb.length;
+  const unit = (i: number, sign: number) => Array.from({ length: n }, (_, k) => (k === i ? sign : 0));
+  return [
+    ...lb.map((l, i) => ({ a: unit(i, 1), b: l })),
+    ...ub.map((u, i) => ({ a: unit(i, -1), b: -u })),
+  ];
+}
+
+/** Minimum-variance weights, optionally at a fixed target return. */
+export function minimumVariance(cov: number[][], lb: number[], ub: number[], target?: { mu: number[]; value: number }) {
+  const n = cov.length;
+  const equalities = [{ a: Array(n).fill(1), b: 1 }];
+  if (target) equalities.push({ a: target.mu, b: target.value });
+  return solveQuadratic(regularize(cov), Array(n).fill(0), [...equalities, ...boxConstraints(lb, ub)], equalities.length);
+}
+
+/**
+ * Max-Sharpe weights via the Cornuéjols–Tütüncü transformation: with y = κw, minimize yᵀΣy subject to
+ * (μ − rf)ᵀy = 1, Σy = κ, lb·κ ≤ y ≤ ub·κ, κ ≥ 0, then w = y / κ. κ gets a tiny curvature so the
+ * quadratic stays strictly convex. Returns null when no allowed portfolio has a positive excess return.
+ */
+export function maximumSharpe(mu: number[], cov: number[][], riskFreeRate: number, lb: number[], ub: number[]) {
+  const n = mu.length;
+  const sigma = regularize(cov);
+  const avgVar = sigma.reduce((s, row, i) => s + row[i], 0) / n || 1;
+  // Variables: y_0..y_{n-1}, κ
+  const D = Array.from({ length: n + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i < n && j < n ? sigma[i][j] : i === j ? 1e-10 * avgVar : 0)));
+  const row = (yCoef: (i: number) => number, kappa: number) => [...Array.from({ length: n }, (_, i) => yCoef(i)), kappa];
+
+  const constraints = [
+    { a: row(i => mu[i] - riskFreeRate, 0), b: 1 },
+    { a: row(() => 1, -1), b: 0 },
+    ...lb.map((l, k) => ({ a: row(i => (i === k ? 1 : 0), -l), b: 0 })),
+    ...ub.map((u, k) => ({ a: row(i => (i === k ? -1 : 0), u), b: 0 })),
+    { a: row(() => 0, 1), b: 0 },
+  ];
+
+  try {
+    const solution = solveQuadratic(D, Array(n + 1).fill(0), constraints, 2);
+    const kappa = solution[n];
+    if (!(kappa > 0)) return null;
+    return solution.slice(0, n).map(y => y / kappa);
+  } catch (e) {
+    if (e instanceof QPInfeasibleError) return null;
+    throw e;
+  }
+}
+
+/** Highest expected return reachable within the bounds: fill the best assets first. */
+function maximumReturn(mu: number[], lb: number[], ub: number[]) {
+  const w = [...lb];
+  let remaining = 1 - lb.reduce((a, b) => a + b, 0);
+  for (const i of mu.map((_, i) => i).sort((a, b) => mu[b] - mu[a])) {
+    const add = Math.min(ub[i] - lb[i], remaining);
+    w[i] += add;
+    remaining -= add;
+  }
+  return w.reduce((s, wi, i) => s + wi * mu[i], 0);
+}
+
+/** Upper half of the frontier: minimum variance at evenly spaced returns up to the highest reachable. */
+function efficientFrontier(mu: number[], cov: number[][], lb: number[], ub: number[], minVarReturn: number) {
+  const maxRet = maximumReturn(mu, lb, ub);
+  const points: FrontierPoint[] = [];
+  for (let k = 0; k <= FRONTIER_POINTS; k++) {
+    const value = minVarReturn + (maxRet - minVarReturn) * (k / FRONTIER_POINTS);
+    try {
+      const w = minimumVariance(cov, lb, ub, { mu, value });
+      points.push(portfolioStats(w, mu, cov));
+    } catch (e) {
+      // The highest-return point can be numerically just out of reach
+      if (!(e instanceof QPInfeasibleError)) throw e;
+    }
+  }
+  return points;
+}
+
+/** Random portfolios within the bounds, only to draw the cloud behind the frontier. */
+function samplePortfolios(mu: number[], cov: number[][], riskFreeRate: number, lb: number[], ub: number[], count: number, random: () => number) {
+  const n = mu.length;
+  const remaining = 1 - lb.reduce((a, b) => a + b, 0);
+  const samples: SimulatedPortfolio[] = [];
+  for (let s = 0; s < count; s++) {
+    // Exponential draws normalized to 1 are uniform on the simplex; reject samples above a max
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const draws = Array.from({ length: n }, () => -Math.log(random() || Number.MIN_VALUE));
+      const total = draws.reduce((a, b) => a + b, 0);
+      const weights = draws.map((x, i) => lb[i] + (x / total) * remaining);
+      if (weights.some((w, i) => w > ub[i] + 1e-12)) continue;
+      const stats = portfolioStats(weights, mu, cov);
+      samples.push({ weights, ...stats, sharpeRatio: (stats.expectedReturn - riskFreeRate) / stats.volatility });
+      break;
+    }
+  }
+  return samples;
+}
+
+/** Weights rounded to 4 decimals; the rounding residue goes to the largest weight so they still sum to 1. */
+function roundWeights(weights: number[]) {
+  const rounded = weights.map(w => Math.round(Math.max(w, 0) * 10000) / 10000);
+  const diff = 1 - rounded.reduce((a, b) => a + b, 0);
+  const maxIdx = rounded.indexOf(Math.max(...rounded));
+  rounded[maxIdx] = Math.round((rounded[maxIdx] + diff) * 10000) / 10000;
+  return rounded;
+}
+
+/**
+ * Optimal portfolio, efficient frontier and a sample of random portfolios.
+ * `numSamples` only controls how many random portfolios are drawn for the chart.
+ */
+export function solvePortfolio(
   expectedReturns: number[],
   covMatrix: number[][],
   riskFreeRate: number,
-  numSimulations: number = 100000,
-  onProgress?: (progress: number) => void,
   maxWeights?: number[],
-  minWeights?: number[]
-): Promise<PortfolioOptimization> {
+  minWeights?: number[],
+  numSamples = 2000,
+  random: () => number = Math.random,
+): PortfolioOptimization {
   const n = expectedReturns.length;
-  
-  // Create an array of minWeights, defaulting to 0.05 if not provided or empty
-  const minW = minWeights || new Array(n).fill(0.05);
-  let sumMinWeights = 0;
-  for (let j = 0; j < n; j++) {
-      sumMinWeights += minW[j];
-  }
-  
-  const remainingWeight = 1 - sumMinWeights;
-  
-  if (remainingWeight < 0) {
-    throw new ConstraintError(`Minimum weight constraints (sum = ${(sumMinWeights*100).toFixed(1)}%) exceed 100%.`, 'minSum', { sum: sumMinWeights });
-  }
+  const lb = minWeights || new Array(n).fill(DEFAULT_MIN_WEIGHT);
+  const ub = maxWeights || new Array(n).fill(1);
+  validateBounds(lb, ub);
 
-  const maxW = maxWeights || new Array(n).fill(1);
-  let sumMaxWeights = 0;
-  for (let j = 0; j < n; j++) {
-    if (minW[j] > maxW[j]) {
-      throw new ConstraintError(`Minimum weight (${(minW[j]*100).toFixed(1)}%) exceeds maximum weight (${(maxW[j]*100).toFixed(1)}%) for asset ${j + 1}.`, 'minAboveMax', { assetIndex: j, min: minW[j], max: maxW[j] });
-    }
-    sumMaxWeights += maxW[j];
-  }
-  if (sumMaxWeights < 1 - 1e-9) {
-    throw new ConstraintError(`Maximum weight constraints (sum = ${(sumMaxWeights*100).toFixed(1)}%) are below 100%; the portfolio cannot be fully invested.`, 'maxSum', { sum: sumMaxWeights });
-  }
+  const minVarWeights = minimumVariance(covMatrix, lb, ub);
+  const minVar = portfolioStats(minVarWeights, expectedReturns, covMatrix);
 
-  let maxSharpe = -Infinity;
-  // Feasible starting point: equal weights if they fit the bounds, otherwise fill each
-  // asset's [min, max] range proportionally to its capacity (always sums to 1 given the checks above)
-  let bestWeights: number[] = new Array(n).fill(1/n);
-  if (bestWeights.some((w, j) => w < minW[j] || w > maxW[j])) {
-    const capacity = maxW.map((m, j) => m - minW[j]);
-    const totalCapacity = capacity.reduce((a, b) => a + b, 0);
-    bestWeights = minW.map((m, j) => m + (totalCapacity > 0 ? capacity[j] * remainingWeight / totalCapacity : 0));
-  }
+  const sharpeWeights = maximumSharpe(expectedReturns, covMatrix, riskFreeRate, lb, ub);
+  const method = sharpeWeights ? 'maxSharpe' : 'minVariance';
+  const weights = roundWeights(sharpeWeights ?? minVarWeights);
+  const stats = portfolioStats(weights, expectedReturns, covMatrix);
 
-  let bestReturn = 0;
-  let bestVol = 0;
-
-  // Track portfolios for efficient frontier curve
-  const minReturn = Math.min(...expectedReturns);
-  const maxReturn = Math.max(...expectedReturns);
-  
-  const numBuckets = 100;
-  // If maxReturn == minReturn, handle edge case safely
-  const returnStep = maxReturn > minReturn ? (maxReturn - minReturn) / numBuckets : 0.01;
-  const frontierBuckets = new Array(numBuckets).fill(Infinity);
-  const frontierReturns = new Array(numBuckets).fill(0);
-  const simulated: SimulatedPortfolio[] = [];
-
-  // Seed with equal weights just in case
-  let initialVar = 0;
-  for (let j = 0; j < n; j++) {
-    let rowSum = 0;
-    for (let k = 0; k < n; k++) {
-      rowSum += bestWeights[k] * covMatrix[j][k];
-    }
-    initialVar += bestWeights[j] * rowSum;
-  }
-  bestVol = Math.sqrt(initialVar);
-  for (let j = 0; j < n; j++) bestReturn += bestWeights[j] * expectedReturns[j];
-  maxSharpe = (bestReturn - riskFreeRate) / bestVol;
-
-  const chunkSize = 5000;
-  
-  for (let chunkStart = 0; chunkStart < numSimulations; chunkStart += chunkSize) {
-    const chunkEnd = Math.min(chunkStart + chunkSize, numSimulations);
-    
-    for (let i = chunkStart; i < chunkEnd; i++) {
-      // Generate random weights on the simplex
-      let valid = false;
-      let weights = new Array(n);
-      let pReturn = 0;
-      let attempts = 0;
-      
-      while (!valid && attempts < 50) {
-        attempts++;
-        let randSum = 0;
-        const rands = new Array(n);
-        for (let j = 0; j < n; j++) {
-          // using -log(Math.random()) for exponential distribution to sample uniformly from simplex
-          rands[j] = -Math.log(Math.random());
-          randSum += rands[j];
-        }
-        
-        valid = true;
-        pReturn = 0;
-        for (let j = 0; j < n; j++) {
-          weights[j] = minW[j] + (rands[j] / randSum) * remainingWeight;
-          if (maxWeights && weights[j] > maxWeights[j]) {
-            valid = false;
-            break;
-          }
-          pReturn += weights[j] * expectedReturns[j];
-        }
-      }
-      if (!valid) continue;
-      
-      // Calculate portfolio variance: w^T * Cov * w
-      let pVar = 0;
-      for (let j = 0; j < n; j++) {
-        let rowSum = 0;
-        for (let k = 0; k < n; k++) {
-          rowSum += weights[k] * covMatrix[j][k];
-        }
-        pVar += weights[j] * rowSum;
-      }
-      
-      const pVol = Math.sqrt(pVar);
-      const sharpe = (pReturn - riskFreeRate) / pVol;
-      
-      if (sharpe > maxSharpe) {
-        maxSharpe = sharpe;
-        bestWeights = weights;
-        bestReturn = pReturn;
-        bestVol = pVol;
-      }
-
-      // Save a subset for plotting the scatter plot
-      if (Math.random() < 0.02) { // approx 2000 points
-        simulated.push({ weights, expectedReturn: pReturn, volatility: pVol, sharpeRatio: sharpe });
-      }
-      
-      // Update frontier buckets
-      if (returnStep > 0) {
-        const bucketIdx = Math.floor((pReturn - minReturn) / returnStep);
-        if (bucketIdx >= 0 && bucketIdx < numBuckets) {
-          if (pVol < frontierBuckets[bucketIdx]) {
-            frontierBuckets[bucketIdx] = pVol;
-            frontierReturns[bucketIdx] = pReturn;
-          }
-        }
-      }
-    }
-    
-    if (onProgress) {
-      onProgress(chunkEnd / numSimulations);
-    }
-    // Yield to the event loop so UI doesn't freeze
-    await new Promise(resolve => setTimeout(resolve, 0));
-  }
-
-  // Clean weights to exactly 4 decimal places while maintaining sum=1
-  const cleanedWeights = bestWeights.map(w => Math.round(w * 10000) / 10000);
-  const sumDiff = 1 - cleanedWeights.reduce((a, b) => a + b, 0);
-  if (Math.abs(sumDiff) > 0) {
-    // Add difference to the largest weight to correct rounding error
-    let maxIdx = 0;
-    for (let i = 1; i < n; i++) {
-      if (cleanedWeights[i] > cleanedWeights[maxIdx]) maxIdx = i;
-    }
-    cleanedWeights[maxIdx] += sumDiff;
-  }
-
-  // Construct frontier points - only the upper efficient half
-  const frontier: FrontierPoint[] = [];
-  let currentMinVol = Infinity;
-  for (let i = numBuckets - 1; i >= 0; i--) { 
-    if (frontierBuckets[i] !== Infinity) {
-      if (frontierBuckets[i] < currentMinVol) {
-        currentMinVol = frontierBuckets[i];
-        frontier.push({
-          expectedReturn: frontierReturns[i],
-          volatility: frontierBuckets[i]
-        });
-      }
-    }
-  }
-  frontier.reverse();
-
-  // Add the optimal point to the frontier if it's not well represented
-  frontier.push({ expectedReturn: bestReturn, volatility: bestVol });
+  const frontier = efficientFrontier(expectedReturns, covMatrix, lb, ub, minVar.expectedReturn);
+  frontier.push(stats);
   frontier.sort((a, b) => a.volatility - b.volatility);
 
   return {
     optimal: {
-      weights: cleanedWeights,
-      expectedReturn: bestReturn,
-      volatility: bestVol,
-      sharpeRatio: maxSharpe
+      weights,
+      ...stats,
+      sharpeRatio: stats.volatility > 0 ? (stats.expectedReturn - riskFreeRate) / stats.volatility : 0,
+      method,
     },
     frontier,
-    simulated
+    simulated: samplePortfolios(expectedReturns, covMatrix, riskFreeRate, lb, ub, numSamples, random),
   };
+}
+
+/** Async wrapper kept for callers that ran the previous sampling optimizer. */
+export async function optimizePortfolio(
+  expectedReturns: number[],
+  covMatrix: number[][],
+  riskFreeRate: number,
+  numSamples: number = 2000,
+  _onProgress?: (progress: number) => void,
+  maxWeights?: number[],
+  minWeights?: number[]
+): Promise<PortfolioOptimization> {
+  return solvePortfolio(expectedReturns, covMatrix, riskFreeRate, maxWeights, minWeights, numSamples);
 }

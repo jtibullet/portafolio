@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import type { AssetMetadata, SentimentResult } from '../types';
 
-const EXCHANGE_RATE_REFRESH_MS = 10000;
+// The server caches the rate for a minute, so polling faster would only return the same value
+const EXCHANGE_RATE_REFRESH_MS = 60000;
 
 export function useExchangeRate() {
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);

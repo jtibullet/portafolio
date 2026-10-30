@@ -6,6 +6,7 @@ import { createServer as createViteServer } from "vite";
 import YahooFinanceRaw from "yahoo-finance2";
 import Database from "better-sqlite3";
 import { subYears, subMonths, format } from "date-fns";
+import { createPriceCache, createTtlCache, mapWithConcurrency, type PricePoint } from "./server/marketCache";
 
 const YahooFinance = (YahooFinanceRaw as any).default || YahooFinanceRaw;
 const yfOptions = { validation: { logErrors: false }, suppressNotices: ['yahooSurvey'] };
@@ -16,7 +17,10 @@ declare const IS_PROD_BUILD: boolean | undefined;
 const isProduction = process.env.NODE_ENV === "production" || (typeof IS_PROD_BUILD !== "undefined" && IS_PROD_BUILD);
 
 // Limits on client-supplied input so a single request can't trigger unbounded Yahoo Finance calls
-const MAX_TICKERS = 20;
+// 30 assets plus the benchmark, with room to spare
+const MAX_TICKERS = 40;
+/** Parallel requests to Yahoo Finance; more risks being rate limited */
+const YAHOO_CONCURRENCY = 5;
 const SYMBOL_PATTERN = /^[A-Za-z0-9.\-=^]{1,20}$/;
 
 function parseSymbols(value: unknown): string[] | null {
@@ -54,6 +58,40 @@ try {
   db = null;
 }
 
+let priceCache: ReturnType<typeof createPriceCache>;
+try {
+  priceCache = createPriceCache(db);
+} catch (err) {
+  console.error("Price cache tables unavailable; caching prices in memory instead.", err);
+  priceCache = createPriceCache(null);
+}
+const exchangeRateCache = createTtlCache<number>(60 * 1000);
+const metadataCache = createTtlCache<any>(12 * 60 * 60 * 1000);
+
+/** Daily adjusted closes from Yahoo Finance (3 attempts), or from the cache when fresh. Null if unavailable. */
+async function fetchDailyHistory(symbol: string, period1: string, period2: string): Promise<PricePoint[] | null> {
+  const cached = priceCache.get(symbol, period1);
+  if (cached) return cached;
+
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const chartRes = await yahooFinance.chart(symbol, { period1, period2, interval: "1d" }, { validateResult: false });
+      if (!chartRes || !chartRes.quotes) throw new Error("No quotes returned");
+      const rows: PricePoint[] = chartRes.quotes
+        .filter((q: any) => q.close != null && q.adjclose != null)
+        .map((q: any) => ({ date: format(q.date, "yyyy-MM-dd"), adjClose: q.adjclose }));
+      priceCache.set(symbol, period1, rows);
+      return rows;
+    } catch (e) {
+      lastError = e;
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+  }
+  console.log(`Warning: Could not fetch ${symbol} - ${lastError?.message}`);
+  return null;
+}
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -66,8 +104,13 @@ async function startServer() {
 
   app.get("/api/exchange-rate", async (req, res) => {
     try {
-      const quote = await yahooFinance.quote("CLP=X", {}, { validateResult: false });
-      res.json({ rate: quote.regularMarketPrice });
+      let rate = exchangeRateCache.get("CLP=X");
+      if (rate === undefined) {
+        const quote = await yahooFinance.quote("CLP=X", {}, { validateResult: false });
+        rate = quote.regularMarketPrice as number;
+        exchangeRateCache.set("CLP=X", rate);
+      }
+      res.json({ rate });
     } catch (error) {
       console.error("Exchange rate error:", error);
       res.status(500).json({ error: "Failed to fetch exchange rate" });
@@ -140,54 +183,9 @@ async function startServer() {
       const period1 = format(startDate, "yyyy-MM-dd");
       const period2 = format(endDate, "yyyy-MM-dd");
 
-      const results: any = {};
-      
-      for (const symbol of allSymbols) {
-        try {
-          let result = null;
-          let attempts = 0;
-          let lastError = null;
-          
-          while (attempts < 3 && !result) {
-            try {
-              const chartRes = await yahooFinance.chart(symbol as string, {
-                period1,
-                period2,
-                interval: "1d"
-              }, { validateResult: false });
-              
-              if (chartRes && chartRes.quotes) {
-                // map to historical format
-                result = chartRes.quotes.map((q: any) => ({
-                    date: q.date,
-                    open: q.open,
-                    high: q.high,
-                    low: q.low,
-                    close: q.close,
-                    adjClose: q.adjclose,
-                    volume: q.volume
-                })).filter((q: any) => q.close != null && q.adjClose != null);
-              } else {
-                  throw new Error("No quotes returned");
-              }
-            } catch (e: any) {
-                lastError = e;
-                attempts++;
-                if (attempts < 3) {
-                    await new Promise(r => setTimeout(r, 1000 * attempts));
-                }
-            }
-          }
-          
-          if (result) {
-            results[symbol as string] = result;
-          } else {
-            console.log(`Warning: Could not fetch ${symbol} - ${lastError?.message}`);
-          }
-        } catch (e: any) {
-          console.log(`Warning: Unhandled error fetching ${symbol} - ${e.message}`);
-        }
-      }
+      const histories = await mapWithConcurrency(allSymbols, YAHOO_CONCURRENCY, symbol => fetchDailyHistory(symbol, period1, period2));
+      const results: Record<string, PricePoint[]> = {};
+      allSymbols.forEach((symbol, i) => { if (histories[i]) results[symbol] = histories[i]!; });
       
       const successfulSymbols = Object.keys(results);
       
@@ -198,9 +196,8 @@ async function startServer() {
       for (const symbol of successfulSymbols) {
           pricesBySymbol[symbol as string] = {};
           for (const row of results[symbol as string]) {
-              const dateStr = format(row.date, "yyyy-MM-dd");
-              pricesBySymbol[symbol as string][dateStr] = row.adjClose;
-              allDates.add(dateStr);
+              pricesBySymbol[symbol as string][row.date] = row.adjClose;
+              allDates.add(row.date);
           }
       }
       
@@ -237,7 +234,7 @@ async function startServer() {
       if (!tickers) {
         return res.status(400).json({ error: `Provide 1-${MAX_TICKERS} valid tickers` });
       }
-      const promises = tickers.map(async (symbol: any) => {
+      const fetchMetadata = async (symbol: any) => {
         try {
           let price: any = {};
           let summary: any = {};
@@ -355,8 +352,15 @@ async function startServer() {
             expectedGrowth: null,
           };
         }
+      };
+      const results = await mapWithConcurrency(tickers, YAHOO_CONCURRENCY, async (symbol) => {
+        const cached = metadataCache.get(symbol);
+        if (cached) return cached;
+        const meta = await fetchMetadata(symbol);
+        // Don't cache the fallback returned when Yahoo failed
+        if (meta.nameAndDesc !== "Data not available") metadataCache.set(symbol, meta);
+        return meta;
       });
-      const results = await Promise.all(promises);
       res.json({ metadata: results });
     } catch (error) {
       console.error("Metadata error:", error);

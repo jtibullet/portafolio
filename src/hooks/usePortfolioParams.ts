@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DEFAULT_TICKERS, MAX_ASSETS } from '../constants';
 import type { PortfolioParams, WeightBounds } from '../types';
 
@@ -23,9 +23,10 @@ export function usePortfolioParams() {
 
   const removeTicker = (ticker: string) => setSelectedTickers(selectedTickers.filter(t => t !== ticker));
 
-  const params: PortfolioParams = {
+  // Stable identity so memoized children only re-render when an input actually changes
+  const params: PortfolioParams = useMemo(() => ({
     selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights,
-  };
+  }), [selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights]);
 
   return {
     params,

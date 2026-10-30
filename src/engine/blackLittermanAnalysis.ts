@@ -1,7 +1,7 @@
 import { calculateLogReturns, variance } from '../utils/quantMath';
 import { calculateBlackLitterman, simulateBlackSwan } from '../advancedQuant';
 import { optimizePortfolio } from '../optimization';
-import { OPTIMIZER_SIMULATIONS, TRADING_DAYS } from '../constants';
+import { FRONTIER_CHART_SAMPLES, TRADING_DAYS } from '../constants';
 import { resolveBounds } from './portfolioAnalysis';
 import type { BlackLittermanStats, InvestorView, PriceRow, QuantStats, WeightBounds } from '../types';
 
@@ -44,7 +44,7 @@ export async function runBlackLittermanAnalysis(input: BlackLittermanInput): Pro
   const { pi, blReturns, blCovariance } = calculateBlackLitterman(quantStats.covarianceMatrix, marketWeights, delta, viewsArr, confArr);
 
   const { minWeightsArr, maxWeightsArr } = resolveBounds(symbols, minWeights, maxWeights);
-  const optimization = await optimizePortfolio(blReturns, blCovariance, riskFreeRate, OPTIMIZER_SIMULATIONS, undefined, maxWeightsArr, minWeightsArr);
+  const optimization = await optimizePortfolio(blReturns, blCovariance, riskFreeRate, FRONTIER_CHART_SAMPLES, undefined, maxWeightsArr, minWeightsArr);
 
   const portDailyVol = optimization.optimal.volatility / Math.sqrt(TRADING_DAYS);
   const stress = simulateBlackSwan(portDailyVol, 1000, 3);

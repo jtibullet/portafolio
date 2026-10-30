@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Bar, BarChart, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useI18n } from '../../i18n';
@@ -30,8 +31,23 @@ function SummaryCards({ result }: { result: MonteCarloResult }) {
   );
 }
 
+/** Points drawn per simulated path: thousands of daily steps per line make the SVG chart very slow */
+const POINTS_PER_PATH = 120;
+
+/** Every k-th step of each path (plus the last one), as chart rows. */
+function downsamplePaths(paths: number[][]) {
+  return paths.map(path => {
+    const stride = Math.max(1, Math.ceil(path.length / POINTS_PER_PATH));
+    const rows = [];
+    for (let step = 0; step < path.length; step += stride) rows.push({ step, value: path[step] });
+    if ((path.length - 1) % stride !== 0) rows.push({ step: path.length - 1, value: path[path.length - 1] });
+    return rows;
+  });
+}
+
 function FanChart({ result, years }: { result: MonteCarloResult; years: number }) {
   const { t, f } = useI18n();
+  const lines = useMemo(() => downsamplePaths(result.paths), [result.paths]);
   return (
     <div className="flex flex-col">
       <SectionHeader title={t('mc.cone')}>
@@ -52,10 +68,10 @@ function FanChart({ result, years }: { result: MonteCarloResult; years: number }
             />
             <YAxis domain={['auto', 'auto']} tickFormatter={(val) => f.compact(val)} tick={axisTick} axisLine={false} tickLine={false} width={44} />
             <Tooltip formatter={(val: number) => f.money(val, 'USD', 0)} labelFormatter={(label: number) => t('mc.day', { n: label })} />
-            {result.paths.map((path, idx) => (
+            {lines.map((data, idx) => (
               <Line
                 key={idx}
-                data={path.map((value, step) => ({ step, value }))}
+                data={data}
                 type="monotone"
                 dataKey="value"
                 stroke="rgba(59, 130, 246, 0.08)"
@@ -101,7 +117,9 @@ function FinalValueHistogram({ result }: { result: MonteCarloResult }) {
   );
 }
 
-export function MonteCarloPanel({ result, years, setYears, initialAmount, setInitialAmount }: {
+export function MonteCarloPanel({ available, result, years, setYears, initialAmount, setInitialAmount }: {
+  /** False when there is no optimized portfolio to project */
+  available: boolean;
   result: MonteCarloResult | null;
   years: number;
   setYears: (years: number) => void;
@@ -137,7 +155,9 @@ export function MonteCarloPanel({ result, years, setYears, initialAmount, setIni
         </div>
       </div>
 
-      {!result ? (
+      {!available ? (
+        <div className="text-center text-zinc-500 italic text-sm py-12">{t('mc.unavailable')}</div>
+      ) : !result ? (
         <div className="flex justify-center items-center h-[300px]">
           <Loader2 className="w-8 h-8 animate-spin text-zinc-300" />
         </div>

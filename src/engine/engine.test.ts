@@ -6,6 +6,7 @@ import { impliedRiskAversion } from './blackLittermanAnalysis';
 import { buildRecommendations } from './recommendations';
 import { buildTrailingPerformance, computeSectorWeights, buildHistogram } from './chartData';
 import type { AssetMetadata, PriceRow, RecommendationCandidate } from '../types';
+import { defaultMinWeight } from '../constants';
 
 /** Deterministic price rows: each symbol follows its own pseudo-random walk. */
 function makeRows(symbols: string[], days: number, gaps: Record<string, number[]> = {}): PriceRow[] {
@@ -48,6 +49,20 @@ describe('portfolioDailyReturns', () => {
     const r = portfolioDailyReturns(['A', 'B'], { A: [0.01, null], B: [0.03, 0.02] }, [0.5, 0.5]);
     expect(r[0]).toBeCloseTo(0.02, 12);
     expect(r[1]).toBeNull();
+  });
+});
+
+describe('defaultMinWeight', () => {
+  it('is 5% for up to 10 assets and keeps the total at 50% beyond that', () => {
+    expect(defaultMinWeight(7)).toBe(0.05);
+    expect(defaultMinWeight(10)).toBe(0.05);
+    expect(defaultMinWeight(30) * 30).toBeCloseTo(0.5, 12);
+  });
+
+  it('keeps 30 assets with default bounds feasible', () => {
+    const symbols = Array.from({ length: 30 }, (_, i) => `S${i}`);
+    const { minWeightsArr } = resolveBounds(symbols, {}, {});
+    expect(minWeightsArr.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(1);
   });
 });
 

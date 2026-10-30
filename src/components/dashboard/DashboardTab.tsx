@@ -54,7 +54,8 @@ function renderWidget(id: string, { quantStats, metadata, params, isOptimizing }
   }
 }
 
-export function DashboardTab(props: DashboardTabProps) {
+/** Memoized: results arriving for other tabs (Black-Litterman, recommendations) must not redraw every chart here. */
+export const DashboardTab = React.memo(function DashboardTab(props: DashboardTabProps) {
   const { t } = useI18n();
   const [widgets, setWidgets] = usePersistentState<string[]>('dashboardWidgets', DEFAULT_DASHBOARD_WIDGETS);
   const [sizes, setSizes] = usePersistentState<Record<string, number>>('widgetSizes', DEFAULT_WIDGET_SIZES);
@@ -110,4 +111,4 @@ export function DashboardTab(props: DashboardTabProps) {
       <SavedPortfoliosHistory savedPortfolios={props.savedPortfolios} />
     </>
   );
-}
+});

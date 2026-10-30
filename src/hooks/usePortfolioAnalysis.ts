@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { prepareAnalysis, optimizePreparedAnalysis } from '../engine/portfolioAnalysis';
-import { runBlackLittermanAnalysis } from '../engine/blackLittermanAnalysis';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildRecommendations } from '../engine/recommendations';
-import { runMonteCarlo, type MonteCarloResult } from '../monteCarlo';
+import { runJob } from '../worker/client';
+import { useDebouncedValue } from './useDebouncedValue';
+import type { MonteCarloResult } from '../monteCarlo';
 import type { ARIMA_Forecast, AlphaSignalResult } from '../utils/quantMath';
 import type { MarketDataState } from './useMarketData';
 import { useI18n } from '../i18n';
@@ -10,9 +10,13 @@ import type {
   BlackLittermanStats, InvestorView, OptimizationFailure, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
 } from '../types';
 
+/** Wait this long after the last slider/input change before recomputing */
+const INPUT_DEBOUNCE_MS = 250;
+
 /**
- * Core analysis: statistics, ARIMA forecasts, momentum signals and the Max-Sharpe portfolio.
- * Re-runs whenever the market data or the parameters change; a superseded run's result is dropped.
+ * Core analysis: statistics, ARIMA forecasts, momentum signals and the Max-Sharpe portfolio,
+ * computed in the analysis worker. Re-runs when the market data or the parameters change;
+ * a superseded run's result is dropped.
  */
 export function usePortfolioAnalysis(marketData: MarketDataState | null, params: PortfolioParams) {
   const [quantStats, setQuantStats] = useState<QuantStats | null>(null);
@@ -21,15 +25,16 @@ export function usePortfolioAnalysis(marketData: MarketDataState | null, params:
   const [arimaForecasts, setArimaForecasts] = useState<Record<string, ARIMA_Forecast>>({});
   const [alphaSignals, setAlphaSignals] = useState<Record<string, AlphaSignalResult>>({});
   const { selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights } = params;
+  const inputs = useDebouncedValue(
+    useMemo(() => ({ selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights }),
+      [selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights]),
+    INPUT_DEBOUNCE_MS,
+  );
 
   useEffect(() => {
     const historicalData = marketData?.historicalData;
     const symbols = marketData?.symbols || [];
-    const prepared = historicalData && historicalData.length > 0 && symbols.length > 0
-      ? prepareAnalysis({ historicalData, symbols, selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights })
-      : null;
-
-    if (!prepared) {
+    if (!historicalData || historicalData.length === 0 || symbols.length === 0) {
       setQuantStats(null);
       setOptimizationError(null);
       setIsOptimizing(false);
@@ -38,18 +43,23 @@ export function usePortfolioAnalysis(marketData: MarketDataState | null, params:
 
     let cancelled = false;
     setIsOptimizing(true);
-    setArimaForecasts(prepared.arimaForecasts);
-    setAlphaSignals(prepared.alphaSignals);
-
-    optimizePreparedAnalysis(prepared, riskFreeRate, minWeights, maxWeights).then(result => {
-      // A newer run superseded this one; drop the stale result
-      if (cancelled) return;
-      setOptimizationError(result.optimizationError);
-      setQuantStats(result.quantStats);
-      setIsOptimizing(false);
-    });
+    runJob('analyze', { historicalData, symbols, ...inputs })
+      .then(result => {
+        // A newer run superseded this one; drop the stale result
+        if (cancelled) return;
+        setQuantStats(result?.quantStats ?? null);
+        setOptimizationError(result?.optimizationError ?? null);
+        setArimaForecasts(result?.arimaForecasts ?? {});
+        setAlphaSignals(result?.alphaSignals ?? {});
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.error('Analysis failed', err);
+        setOptimizationError({ code: 'generic' });
+      })
+      .finally(() => { if (!cancelled) setIsOptimizing(false); });
     return () => { cancelled = true; };
-  }, [marketData, riskFreeRate, selectedTickers, selectedBenchmark, useArimaForecast, maxWeights, minWeights]);
+  }, [marketData, inputs]);
 
   return { quantStats, isOptimizing, optimizationError, arimaForecasts, alphaSignals };
 }
@@ -85,15 +95,16 @@ export function useBlackLitterman(
   const [blStats, setBlStats] = useState<BlackLittermanStats | null>(null);
   const { selectedBenchmark, riskFreeRate, minWeights, maxWeights } = params;
   const historicalData = marketData?.historicalData || null;
+  const debouncedViews = useDebouncedValue(views, INPUT_DEBOUNCE_MS);
 
   useEffect(() => {
-    if (!quantStats || Object.keys(views).length === 0 || !historicalData) return;
+    if (!quantStats || Object.keys(debouncedViews).length === 0 || !historicalData) return;
     let cancelled = false;
-    runBlackLittermanAnalysis({ quantStats, views, historicalData, benchmark: selectedBenchmark, riskFreeRate, minWeights, maxWeights })
+    runJob('blackLitterman', { quantStats, views: debouncedViews, historicalData, benchmark: selectedBenchmark, riskFreeRate, minWeights, maxWeights })
       .then(result => { if (!cancelled) setBlStats(result); })
       .catch(err => console.log("BL Error", err));
     return () => { cancelled = true; };
-  }, [quantStats, views, riskFreeRate, historicalData, selectedBenchmark, maxWeights, minWeights]);
+  }, [quantStats, debouncedViews, riskFreeRate, historicalData, selectedBenchmark, maxWeights, minWeights]);
 
   return blStats;
 }
@@ -101,16 +112,19 @@ export function useBlackLitterman(
 /** Monte Carlo projection of the optimal portfolio; only computed while its tab is visible. */
 export function useMonteCarlo(enabled: boolean, quantStats: QuantStats | null, years: number, initialAmount: number) {
   const [mcResult, setMcResult] = useState<MonteCarloResult | null>(null);
+  const debouncedAmount = useDebouncedValue(initialAmount, INPUT_DEBOUNCE_MS);
+  const debouncedYears = useDebouncedValue(years, INPUT_DEBOUNCE_MS);
 
   useEffect(() => {
     const optimal = quantStats?.optimization?.optimal;
     if (!enabled || !optimal) return;
     let cancelled = false;
     setMcResult(null);
-    runMonteCarlo(initialAmount, optimal.expectedReturn, optimal.volatility, years)
-      .then(result => { if (!cancelled) setMcResult(result); });
+    runJob('monteCarlo', { initialAmount: debouncedAmount, expectedReturn: optimal.expectedReturn, volatility: optimal.volatility, years: debouncedYears })
+      .then(result => { if (!cancelled) setMcResult(result); })
+      .catch(err => console.error('Monte Carlo failed', err));
     return () => { cancelled = true; };
-  }, [enabled, quantStats, years, initialAmount]);
+  }, [enabled, quantStats, debouncedYears, debouncedAmount]);
 
   return mcResult;
 }
@@ -149,17 +163,17 @@ export function useSavedPortfolios() {
   const [savedPortfolios, setSavedPortfolios] = useState<SavedPortfolio[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const res = await fetch('/api/portfolios');
     const data = await res.json();
     if (data.portfolios) setSavedPortfolios(data.portfolios);
-  };
+  }, []);
 
   useEffect(() => {
     refresh().catch(err => console.error('Failed to fetch portfolios', err));
-  }, []);
+  }, [refresh]);
 
-  const savePortfolio = async (quantStats: QuantStats, riskFreeRate: number) => {
+  const savePortfolio = useCallback(async (quantStats: QuantStats, riskFreeRate: number) => {
     if (!quantStats.optimization) return;
     const { optimal } = quantStats.optimization;
     setSaving(true);
@@ -189,7 +203,7 @@ export function useSavedPortfolios() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [t, refresh]);
 
   return { savedPortfolios, saving, savePortfolio };
 }

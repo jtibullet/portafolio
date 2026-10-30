@@ -5,14 +5,23 @@ export const HORIZON_OPTIONS = [
   { label: '3 Years', value: 3 },
   { label: '5 Years', value: 5 },
 ];
-export const MAX_ASSETS = 7;
+export const MAX_ASSETS = 30;
 
 /** Weight bounds applied to a ticker that has no explicit min/max set */
 export const DEFAULT_MIN_WEIGHT = 0.05;
+
+/**
+ * Minimum weight for a ticker without an explicit min: 5%, but never more than half an equal share,
+ * so the defaults stay feasible with many assets (30 x 5% would need 150%).
+ */
+export function defaultMinWeight(assetCount: number) {
+  return Math.min(DEFAULT_MIN_WEIGHT, 0.5 / Math.max(assetCount, 1));
+}
 export const DEFAULT_MAX_WEIGHT = 1.0;
 
 export const TRADING_DAYS = 252;
-export const OPTIMIZER_SIMULATIONS = 100000;
+/** Random portfolios drawn behind the efficient frontier chart (the optimizer itself is exact) */
+export const FRONTIER_CHART_SAMPLES = 2000;
 
 export const POPULAR_TICKERS = [
   { symbol: 'AAPL', name: 'Apple Inc.' },

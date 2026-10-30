@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { PortfolioParams, QuantStats } from '../types';
 
 const HEADERS = ['Asset', 'Weight', 'Expected Return', 'Volatility', 'Sharpe Ratio', 'Beta', 'CAPM E(R)', 'Alpha'];
@@ -37,7 +36,9 @@ export function downloadOptimizationCSV(quantStats: QuantStats) {
   triggerDownload(encodeURI(csvContent), "portfolio_optimization.csv");
 }
 
-export function downloadOptimizationExcel(quantStats: QuantStats) {
+/** The xlsx library is large, so it is only loaded when an Excel export is requested. */
+export async function downloadOptimizationExcel(quantStats: QuantStats) {
+  const XLSX = await import('xlsx');
   const { assetRows, totalRow } = optimizationRows(quantStats);
   const worksheet = XLSX.utils.aoa_to_sheet([HEADERS, ...assetRows, [], totalRow]);
   const workbook = XLSX.utils.book_new();
