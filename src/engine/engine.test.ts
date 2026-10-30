@@ -94,8 +94,11 @@ describe('prepareAnalysis + optimizePreparedAnalysis', () => {
     expect(ok.quantStats.portDailyReturns).toHaveLength(119);
 
     const bad = await optimizePreparedAnalysis(prepared, 0.02, {}, { A: 0.1, B: 0.1, C: 0.1 });
-    expect(bad.optimizationError).toMatch(/below 100%/);
+    expect(bad.optimizationError).toEqual({ code: 'maxSum', sum: expect.closeTo(0.3, 10), min: undefined, max: undefined, symbol: undefined });
     expect(bad.quantStats.optimization).toBeNull();
+
+    const inverted = await optimizePreparedAnalysis(prepared, 0.02, { B: 0.5 }, { B: 0.2 });
+    expect(inverted.optimizationError).toMatchObject({ code: 'minAboveMax', symbol: 'B', min: 0.5, max: 0.2 });
   });
 });
 

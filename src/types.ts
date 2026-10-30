@@ -1,4 +1,4 @@
-import type { PortfolioOptimization } from './optimization';
+import type { ConstraintCode, PortfolioOptimization } from './optimization';
 
 export type TabId = 'dashboard' | 'analytics' | 'ai' | 'validation';
 
@@ -126,4 +126,14 @@ export interface PortfolioParams {
   useArimaForecast: boolean;
   minWeights: WeightBounds;
   maxWeights: WeightBounds;
+}
+
+/** Why the optimizer could not produce a portfolio; rendered as a translated message. */
+export interface OptimizationFailure {
+  code: ConstraintCode | 'generic';
+  sum?: number;
+  min?: number;
+  max?: number;
+  /** Ticker the failure refers to, for 'minAboveMax' */
+  symbol?: string;
 }

@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n';
 import { CollapsibleSection } from '../ui/CollapsibleSection';
 import { CenteredSpinner } from '../ui/Spinner';
 import type { AssetMetadata } from '../../types';
@@ -5,9 +6,10 @@ import type { AssetMetadata } from '../../types';
 const isValid = (v: number | null | undefined): v is number => v !== null && v !== undefined && !isNaN(v);
 
 export function AnalystTargets({ metadata, loading }: { metadata: AssetMetadata[] | null; loading: boolean }) {
+  const { t, f } = useI18n();
   return (
-    <CollapsibleSection id="analystTargets" title="🎯 Analyst Targets & Expected Growth (Current Portfolio)" className="mt-8 print:hidden">
-      <div className="bg-white border border-[#141414] border-t-0 p-4">
+    <CollapsibleSection id="analystTargets" title={t('analyst.title')} className="mt-2 sm:mt-8 print:hidden">
+      <div className="bg-white border border-ink border-t-0 p-4">
         {loading ? (
           <CenteredSpinner />
         ) : metadata && metadata.length > 0 ? (
@@ -15,10 +17,10 @@ export function AnalystTargets({ metadata, loading }: { metadata: AssetMetadata[
             <table className="w-full text-left text-xs font-mono">
               <thead className="bg-zinc-50 border-b border-zinc-200">
                 <tr>
-                  <th className="p-2 font-bold">Ticker</th>
-                  <th className="p-2 font-bold text-right">Current Price (USD)</th>
-                  <th className="p-2 font-bold text-right">1-Year Target Price (USD)</th>
-                  <th className="p-2 font-bold text-right">Expected Growth (%)</th>
+                  <th className="p-2 font-bold">{t('col.ticker')}</th>
+                  <th className="p-2 font-bold text-right whitespace-nowrap">{t('analyst.price')}</th>
+                  <th className="p-2 font-bold text-right whitespace-nowrap">{t('analyst.target')}</th>
+                  <th className="p-2 font-bold text-right whitespace-nowrap">{t('analyst.growth')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -27,10 +29,11 @@ export function AnalystTargets({ metadata, loading }: { metadata: AssetMetadata[
                   return (
                     <tr key={c.symbol} className={i % 2 === 0 ? "bg-white" : "bg-zinc-50"}>
                       <td className="p-2 font-bold">{c.symbol}</td>
-                      <td className="p-2 text-right cursor-help" title="Sourced from Yahoo Finance 'price.regularMarketPrice'">{isValid(c.currentPrice) ? `$${c.currentPrice.toFixed(2)}` : 'N/A'}</td>
-                      <td className="p-2 text-right cursor-help" title="Sourced from Yahoo Finance 'financialData.targetMeanPrice' (average of analyst targets)">{isValid(c.targetMeanPrice) ? `$${c.targetMeanPrice.toFixed(2)}` : 'N/A'}</td>
-                      <td className={`p-2 text-right cursor-help ${isValid(growth) && growth > 0 ? 'text-green-600' : isValid(growth) && growth < 0 ? 'text-red-600' : ''}`} title="Calculated as (Target Price - Current Price) / Current Price">
-                        {isValid(growth) ? `${growth > 0 ? '+' : ''}${growth.toFixed(2)}%` : 'N/A'}
+                      <td className="p-2 text-right cursor-help" title={t('tip.price')}>{isValid(c.currentPrice) ? f.money(c.currentPrice) : t('common.na')}</td>
+                      <td className="p-2 text-right cursor-help" title={t('tip.target')}>{isValid(c.targetMeanPrice) ? f.money(c.targetMeanPrice) : t('common.na')}</td>
+                      <td className={`p-2 text-right cursor-help ${isValid(growth) && growth > 0 ? 'text-green-600' : isValid(growth) && growth < 0 ? 'text-red-600' : ''}`} title={t('tip.growth')}>
+                        {/* expectedGrowth from the server is already in percent */}
+                        {isValid(growth) ? f.signedPct(growth / 100) : t('common.na')}
                       </td>
                     </tr>
                   );
@@ -39,7 +42,7 @@ export function AnalystTargets({ metadata, loading }: { metadata: AssetMetadata[
             </table>
           </div>
         ) : (
-          <div className="text-center text-zinc-500 italic text-sm">No analyst target data available.</div>
+          <div className="text-center text-zinc-500 italic text-sm">{t('analyst.empty')}</div>
         )}
       </div>
     </CollapsibleSection>

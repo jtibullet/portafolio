@@ -2,6 +2,7 @@ import React from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from '@dnd-kit/sortable';
 import { usePersistentState } from '../../hooks/usePersistentState';
+import { useI18n } from '../../i18n';
 import { DEFAULT_DASHBOARD_WIDGETS, DEFAULT_WIDGET_SIZES } from '../../constants';
 import { SortableWidget } from './SortableWidget';
 import { CoreMetricsWidget } from './CoreMetricsWidget';
@@ -54,6 +55,7 @@ function renderWidget(id: string, { quantStats, metadata, params, isOptimizing }
 }
 
 export function DashboardTab(props: DashboardTabProps) {
+  const { t } = useI18n();
   const [widgets, setWidgets] = usePersistentState<string[]>('dashboardWidgets', DEFAULT_DASHBOARD_WIDGETS);
   const [sizes, setSizes] = usePersistentState<Record<string, number>>('widgetSizes', DEFAULT_WIDGET_SIZES);
 
@@ -72,17 +74,17 @@ export function DashboardTab(props: DashboardTabProps) {
   return (
     <>
       <div className="flex flex-col gap-4">
-        <div className="flex justify-end print:hidden">
+        <div className="hidden lg:flex justify-end print:hidden">
           <button
             onClick={() => setWidgets(DEFAULT_DASHBOARD_WIDGETS)}
             className="text-xs font-mono uppercase bg-white border border-zinc-300 text-zinc-600 px-3 py-1 hover:bg-zinc-100 transition-colors flex items-center gap-2"
           >
-            Reset Grid Layout
+            {t('dash.resetLayout')}
           </button>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={widgets} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-1 lg:grid-cols-6 gap-8 pb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 sm:gap-8 pb-4 sm:pb-8">
               {widgets.map(id => {
                 const content = renderWidget(id, props);
                 if (!content) return null;

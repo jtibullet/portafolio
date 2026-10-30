@@ -1,5 +1,7 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useI18n } from '../../i18n';
 import { useUiState } from '../../hooks/useUiState';
+import { CHART } from '../../lib/chartTheme';
 import { CollapsibleSection } from '../ui/CollapsibleSection';
 import type { ARIMA_Forecast } from '../../utils/quantMath';
 
@@ -8,30 +10,29 @@ function ForecastTable({ forecasts, selected, onSelect }: {
   selected: string | null;
   onSelect: (symbol: string) => void;
 }) {
+  const { t, f } = useI18n();
   return (
     <div className="flex-1 overflow-x-auto border border-zinc-200">
       <table className="w-full text-left text-xs font-mono">
         <thead className="bg-zinc-50 border-b border-zinc-200">
           <tr>
-            <th className="p-2 border-r border-zinc-200">Ticker</th>
-            <th className="p-2 border-r border-zinc-200 text-center">ADF Stationarity</th>
-            <th className="p-2 text-right">1-Year Forecast E(R)</th>
+            <th className="p-2 border-r border-zinc-200">{t('col.ticker')}</th>
+            <th className="p-2 border-r border-zinc-200 text-center whitespace-nowrap">{t('arima.stationarity')}</th>
+            <th className="p-2 text-right whitespace-nowrap">{t('arima.forecast')}</th>
           </tr>
         </thead>
         <tbody>
-          {forecasts.map(f => (
+          {forecasts.map(fc => (
             <tr
-              key={f.symbol}
-              className={`border-b border-zinc-100 cursor-pointer transition-colors ${selected === f.symbol ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}
-              onClick={() => onSelect(f.symbol)}
+              key={fc.symbol}
+              className={`border-b border-zinc-100 cursor-pointer transition-colors ${selected === fc.symbol ? 'bg-zinc-100' : 'hover:bg-zinc-50'}`}
+              onClick={() => onSelect(fc.symbol)}
             >
-              <td className="p-2 border-r border-zinc-200 font-bold">{f.symbol}</td>
+              <td className="p-2 border-r border-zinc-200 font-bold">{fc.symbol}</td>
               <td className="p-2 border-r border-zinc-200 text-center">
-                {f.isStationary ? <span className="text-green-600">True</span> : <span className="text-red-600">False</span>}
+                {fc.isStationary ? <span className="text-green-600">{t('arima.yes')}</span> : <span className="text-red-600">{t('arima.no')}</span>}
               </td>
-              <td className={`p-2 text-right ${f.expectedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {(f.expectedReturn * 100).toFixed(2)}%
-              </td>
+              <td className={`p-2 text-right ${fc.expectedReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>{f.pct(fc.expectedReturn)}</td>
             </tr>
           ))}
         </tbody>
@@ -41,6 +42,7 @@ function ForecastTable({ forecasts, selected, onSelect }: {
 }
 
 function ForecastChart({ forecast }: { forecast: ARIMA_Forecast }) {
+  const { t, f } = useI18n();
   const history = forecast.historicalPrices.length;
   const data: { index: number; historicalPrice: number | null; forecastPrice: number | null }[] = [
     ...forecast.historicalPrices.map((p, i) => ({ index: i, historicalPrice: p, forecastPrice: null })),
@@ -51,14 +53,14 @@ function ForecastChart({ forecast }: { forecast: ARIMA_Forecast }) {
 
   return (
     <>
-      <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-center">{forecast.symbol} Forecast Trajectory</h4>
+      <h4 className="text-xs font-bold uppercase tracking-wider mb-2 text-center">{t('arima.trajectory', { symbol: forecast.symbol })}</h4>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
           <XAxis allowDuplicatedCategory={false} dataKey="index" tick={false} axisLine={false} />
-          <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v.toFixed(0)}`} width={40} />
-          <Tooltip labelFormatter={() => ''} formatter={(v: number) => `$${v.toFixed(2)}`} />
-          <Line type="monotone" dataKey="historicalPrice" stroke="#141414" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => f.money(v, 'USD', 0)} width={48} />
+          <Tooltip labelFormatter={() => ''} formatter={(v: number) => f.money(v)} />
+          <Line type="monotone" dataKey="historicalPrice" stroke={CHART.ink} strokeWidth={2} dot={false} isAnimationActive={false} />
           <Line type="monotone" dataKey="forecastPrice" stroke="#ef4444" strokeWidth={2} dot={false} isAnimationActive={false} strokeDasharray="5 5" />
         </LineChart>
       </ResponsiveContainer>
@@ -67,13 +69,14 @@ function ForecastChart({ forecast }: { forecast: ARIMA_Forecast }) {
 }
 
 export function ArimaPanel({ enabled, forecasts }: { enabled: boolean; forecasts: Record<string, ARIMA_Forecast> }) {
+  const { t } = useI18n();
   const [selected, setSelected] = useUiState<string | null>('arima:ticker', null);
 
   return (
-    <CollapsibleSection id="arima" title="📈 Advanced Time-Series Forecasting (ARIMA)" className="mt-8 print:hidden">
-      <div className="bg-white border border-[#141414] border-t-0 p-4">
+    <CollapsibleSection id="arima" title={t('arima.title')} className="mt-2 sm:mt-8 print:hidden">
+      <div className="bg-white border border-ink border-t-0 p-4">
         {!enabled ? (
-          <div className="text-center text-zinc-500 italic text-sm">Please enable ARIMA forecasts in the Optimization Settings to view this module.</div>
+          <div className="text-center text-zinc-500 italic text-sm">{t('arima.disabled')}</div>
         ) : Object.keys(forecasts).length > 0 ? (
           <div className="flex flex-col md:flex-row gap-6">
             <ForecastTable forecasts={Object.values(forecasts)} selected={selected} onSelect={setSelected} />
@@ -81,12 +84,12 @@ export function ArimaPanel({ enabled, forecasts }: { enabled: boolean; forecasts
               {selected && forecasts[selected] ? (
                 <ForecastChart forecast={forecasts[selected]} />
               ) : (
-                <div className="flex items-center justify-center h-full text-zinc-400 italic text-sm">Select a ticker to view trajectory</div>
+                <div className="flex items-center justify-center h-full text-zinc-400 italic text-sm">{t('arima.select')}</div>
               )}
             </div>
           </div>
         ) : (
-          <div className="text-center text-zinc-500 italic text-sm">Waiting for ARIMA computation...</div>
+          <div className="text-center text-zinc-500 italic text-sm">{t('arima.waiting')}</div>
         )}
       </div>
     </CollapsibleSection>

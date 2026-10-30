@@ -15,7 +15,7 @@ export function CollapsibleSection({ id, title, defaultOpen = false, className, 
     <div className={cn("flex flex-col", className)}>
       <button
         onClick={toggle}
-        className="flex justify-between items-center bg-[#141414] text-[#E4E3E0] p-3 text-xs font-mono uppercase hover:bg-zinc-800 transition-colors"
+        className="flex justify-between items-center bg-ink text-paper p-3 text-xs font-mono uppercase hover:bg-zinc-800 transition-colors"
       >
         <span className="flex items-center gap-2">{title}</span>
         <span>{open ? '[-]' : '[+]'}</span>

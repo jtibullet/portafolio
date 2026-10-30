@@ -1,12 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
-import { useMarketData } from './hooks/useMarketData';
+import { AlertTriangle, BarChart2, Loader2 } from 'lucide-react';
+import { useMarketData, type AppError } from './hooks/useMarketData';
 import { usePortfolioParams } from './hooks/usePortfolioParams';
 import { useExchangeRate, useMetadata, useSentiment } from './hooks/useRemoteData';
 import {
   usePortfolioAnalysis, useInvestorViews, useBlackLitterman, useMonteCarlo, useRecommendations, useSavedPortfolios,
 } from './hooks/usePortfolioAnalysis';
+import { useTheme } from './hooks/useTheme';
 import { UiStateProvider } from './hooks/useUiState';
+import { I18nProvider, useI18n } from './i18n';
 import { AppHeader } from './components/layout/AppHeader';
 import { ParametersPanel } from './components/layout/ParametersPanel';
 import { WorkspaceTabs } from './components/layout/WorkspaceTabs';
@@ -15,13 +17,59 @@ import { DashboardTab } from './components/dashboard/DashboardTab';
 import { AnalyticsTab } from './components/analytics/AnalyticsTab';
 import { AiTab } from './components/ai/AiTab';
 import { ValidationTab } from './components/validation/ValidationTab';
-import type { TabId } from './types';
+import type { OptimizationFailure, TabId } from './types';
 
-function ErrorBanner({ children }: { children: ReactNode }) {
-  return <div className="bg-white border border-[#141414] text-red-700 px-4 py-3 mb-8 font-mono text-xs">{children}</div>;
+function Banner({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div role="alert" className="flex gap-3 items-start bg-white border border-red-300 border-l-4 border-l-red-600 text-red-700 px-4 py-3 mb-6 text-xs">
+      <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+      <div>
+        <div className="font-mono font-bold uppercase mb-1">{title}</div>
+        <div className="text-ink">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function useOptimizationMessage(failure: OptimizationFailure | null) {
+  const { t, f } = useI18n();
+  if (!failure) return null;
+  switch (failure.code) {
+    case 'minSum': return t('opt.minSum', { sum: f.pct(failure.sum ?? 0, 1) });
+    case 'maxSum': return t('opt.maxSum', { sum: f.pct(failure.sum ?? 0, 1) });
+    case 'minAboveMax': return t('opt.minAboveMax', { symbol: failure.symbol ?? '', min: f.pct(failure.min ?? 0, 1), max: f.pct(failure.max ?? 0, 1) });
+    default: return t('opt.generic');
+  }
+}
+
+function EmptyState() {
+  const { t } = useI18n();
+  return (
+    <div className="flex flex-col items-center text-center gap-3 bg-white border border-dashed border-zinc-300 px-6 py-12 sm:py-16">
+      <BarChart2 size={32} className="text-zinc-400" />
+      <h3 className="text-sm font-mono uppercase font-bold">{t('empty.title')}</h3>
+      <p className="text-sm text-zinc-500 max-w-md">{t('empty.body')}</p>
+    </div>
+  );
+}
+
+/** Placeholder blocks shaped like the dashboard while the first data download runs. */
+function ResultsSkeleton() {
+  const block = "bg-zinc-200 animate-pulse";
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 sm:gap-8" aria-hidden="true">
+      <div className={`${block} h-64 lg:col-span-3`} />
+      <div className={`${block} h-64 lg:col-span-3`} />
+      <div className={`${block} h-48 lg:col-span-2`} />
+      <div className={`${block} h-48 lg:col-span-4`} />
+      <div className={`${block} h-20 lg:col-span-6`} />
+    </div>
+  );
 }
 
 function Workspace() {
+  const { t, f, years } = useI18n();
+  const theme = useTheme();
   const controls = usePortfolioParams();
   const { params } = controls;
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
@@ -40,95 +88,101 @@ function Workspace() {
   const mcResult = useMonteCarlo(activeTab === 'analytics', quantStats, mcYears, mcInitialAmount);
   const { recommendations, isLoading: recommendationsLoading } = useRecommendations(quantStats, params.riskFreeRate, params.selectedTickers);
   const { savedPortfolios, saving, savePortfolio } = useSavedPortfolios();
+  const optimizationMessage = useOptimizationMessage(optimizationError);
 
   const dataLoading = isFetching || isOptimizing;
   const historicalData = marketData?.historicalData || null;
   const symbols = marketData?.symbols || [];
+  const showResults = !!(historicalData && quantStats && !isFetching);
+  const errorText = (e: AppError) => t(e.key, e.vars);
 
   return (
-    <div className="min-h-screen bg-[#E4E3E0] flex flex-col font-sans text-[#141414]">
-      <main className="flex-1 p-8 flex flex-col overflow-auto w-full max-w-full">
-        <AppHeader onShowMethodology={() => setShowMethodology(true)} />
+    <div className="min-h-screen bg-paper flex flex-col font-sans text-ink">
+      <main className="flex-1 px-4 py-5 sm:p-8 flex flex-col w-full max-w-[1800px] mx-auto">
+        <AppHeader onShowMethodology={() => setShowMethodology(true)} theme={theme.preference} onThemeChange={theme.setPreference} />
 
-        <div className="mb-6 flex flex-col border border-[#141414] bg-white">
-          <ParametersPanel
-            controls={controls}
-            dataLoading={dataLoading}
-            onRun={() => fetchData(params.selectedTickers, params.selectedBenchmark, params.horizonYears)}
-          />
+        <ParametersPanel
+          controls={controls}
+          dataLoading={dataLoading}
+          onRun={() => fetchData(params.selectedTickers, params.selectedBenchmark, params.horizonYears)}
+        />
 
-          <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} exchangeRate={exchangeRate} rateLoading={rateLoading} />
+        <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} exchangeRate={exchangeRate} rateLoading={rateLoading} />
 
-          {error && <ErrorBanner>ERROR: {error}</ErrorBanner>}
-          {optimizationError && <ErrorBanner>OPTIMIZATION ERROR: {optimizationError}</ErrorBanner>}
+        {error && <Banner title={t('error.label')}>{errorText(error)}</Banner>}
+        {optimizationMessage && <Banner title={t('error.optimizationLabel')}>{optimizationMessage}</Banner>}
 
-          {dataLoading && (
-            <div className="flex items-center gap-3 text-[#141414] mb-8 p-4 bg-white border border-[#141414] text-xs font-mono uppercase tracking-widest">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {historicalData ? `Running Institutional Optimization Engine & Monte Carlo...` : `Fetching ${params.horizonYears}-year historical data for ${params.selectedTickers.length} assets and ${params.selectedBenchmark}...`}
-            </div>
-          )}
+        {dataLoading && (
+          <div role="status" className="flex items-center gap-3 text-ink mb-6 p-4 bg-white border border-ink text-xs font-mono uppercase tracking-widest">
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+            {isFetching
+              ? t('status.fetching', { years: years(params.horizonYears), count: params.selectedTickers.length, benchmark: params.selectedBenchmark })
+              : t('status.optimizing')}
+          </div>
+        )}
 
-          {/* Previous results stay visible while a parameter change is being re-optimized */}
-          {historicalData && quantStats && !isFetching && (
-            <div className="flex-1 overflow-y-auto min-h-[500px] flex flex-col gap-8 pb-12">
-              {activeTab === 'dashboard' && (
-                <DashboardTab
-                  quantStats={quantStats}
-                  metadata={metadata}
-                  params={params}
-                  isOptimizing={isOptimizing}
-                  savedPortfolios={savedPortfolios}
-                  saving={saving}
-                  onSave={() => savePortfolio(quantStats, params.riskFreeRate)}
-                />
-              )}
-              {activeTab === 'analytics' && (
-                <AnalyticsTab
-                  quantStats={quantStats}
-                  blStats={blStats}
-                  views={views}
-                  setViews={setViews}
-                  mcResult={mcResult}
-                  mcYears={mcYears}
-                  setMcYears={setMcYears}
-                  mcInitialAmount={mcInitialAmount}
-                  setMcInitialAmount={setMcInitialAmount}
-                />
-              )}
-              {activeTab === 'ai' && (
-                <AiTab
-                  metadata={metadata}
-                  metadataLoading={metadataLoading}
-                  alphaSignals={alphaSignals}
-                  historicalData={historicalData}
-                  sentimentData={sentimentData}
-                  sentimentLoading={sentimentLoading}
-                  useArimaForecast={params.useArimaForecast}
-                  arimaForecasts={arimaForecasts}
-                  recommendations={recommendations}
-                  recommendationsLoading={recommendationsLoading}
-                />
-              )}
-              {activeTab === 'validation' && (
-                <ValidationTab
-                  selectedTickers={params.selectedTickers}
-                  symbols={symbols}
-                  metadata={metadata}
-                  metadataLoading={metadataLoading}
-                  historicalData={historicalData}
-                />
-              )}
+        {isFetching && !quantStats && <ResultsSkeleton />}
+        {!historicalData && !isFetching && !error && <EmptyState />}
 
-              <footer className="mt-auto flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono uppercase text-zinc-500 gap-2">
-                <div>Status: Math Engine Operational [Success]</div>
-                <div>Rows: {historicalData.length} | Assets: {symbols.length} | Risk-Free: {(params.riskFreeRate * 100).toFixed(1)}%</div>
-              </footer>
-            </div>
-          )}
+        {/* Previous results stay visible while a parameter change is being re-optimized */}
+        {showResults && (
+          <div className="flex-1 min-h-[500px] flex flex-col gap-6 sm:gap-8 pb-12">
+            {activeTab === 'dashboard' && (
+              <DashboardTab
+                quantStats={quantStats!}
+                metadata={metadata}
+                params={params}
+                isOptimizing={isOptimizing}
+                savedPortfolios={savedPortfolios}
+                saving={saving}
+                onSave={() => savePortfolio(quantStats!, params.riskFreeRate)}
+              />
+            )}
+            {activeTab === 'analytics' && (
+              <AnalyticsTab
+                quantStats={quantStats!}
+                blStats={blStats}
+                views={views}
+                setViews={setViews}
+                mcResult={mcResult}
+                mcYears={mcYears}
+                setMcYears={setMcYears}
+                mcInitialAmount={mcInitialAmount}
+                setMcInitialAmount={setMcInitialAmount}
+              />
+            )}
+            {activeTab === 'ai' && (
+              <AiTab
+                metadata={metadata}
+                metadataLoading={metadataLoading}
+                alphaSignals={alphaSignals}
+                historicalData={historicalData!}
+                sentimentData={sentimentData}
+                sentimentLoading={sentimentLoading}
+                useArimaForecast={params.useArimaForecast}
+                arimaForecasts={arimaForecasts}
+                recommendations={recommendations}
+                recommendationsLoading={recommendationsLoading}
+              />
+            )}
+            {activeTab === 'validation' && (
+              <ValidationTab
+                selectedTickers={params.selectedTickers}
+                symbols={symbols}
+                metadata={metadata}
+                metadataLoading={metadataLoading}
+                historicalData={historicalData!}
+              />
+            )}
 
-          {showMethodology && <MethodologyModal onClose={() => setShowMethodology(false)} />}
-        </div>
+            <footer className="mt-auto flex flex-col sm:flex-row justify-between items-start sm:items-center text-[9px] font-mono uppercase text-zinc-500 gap-2">
+              <div>{t('footer.status')}</div>
+              <div>{t('footer.summary', { rows: f.num(historicalData!.length, 0), assets: symbols.length, rf: f.pct(params.riskFreeRate, 1) })}</div>
+            </footer>
+          </div>
+        )}
+
+        {showMethodology && <MethodologyModal onClose={() => setShowMethodology(false)} />}
       </main>
     </div>
   );
@@ -136,8 +190,10 @@ function Workspace() {
 
 export default function App() {
   return (
-    <UiStateProvider>
-      <Workspace />
-    </UiStateProvider>
+    <I18nProvider>
+      <UiStateProvider>
+        <Workspace />
+      </UiStateProvider>
+    </I18nProvider>
   );
 }

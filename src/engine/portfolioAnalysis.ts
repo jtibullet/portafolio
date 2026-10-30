@@ -7,9 +7,9 @@ import {
   calculateJensensAlpha, calculateARIMA111, calculateAlphaSignal, calculateBlackLittermanPosterior,
   type ARIMA_Forecast, type AlphaSignalResult,
 } from '../utils/quantMath';
-import { optimizePortfolio } from '../optimization';
+import { ConstraintError, optimizePortfolio } from '../optimization';
 import { DEFAULT_MAX_WEIGHT, DEFAULT_MIN_WEIGHT, OPTIMIZER_SIMULATIONS, TRADING_DAYS } from '../constants';
-import type { AssetStat, PriceRow, QuantStats, WeightBounds } from '../types';
+import type { AssetStat, OptimizationFailure, PriceRow, QuantStats, WeightBounds } from '../types';
 
 export type SeriesBySymbol = Record<string, (number | null)[]>;
 
@@ -196,14 +196,14 @@ export async function optimizePreparedAnalysis(
   riskFreeRate: number,
   minWeights: WeightBounds,
   maxWeights: WeightBounds,
-): Promise<{ quantStats: QuantStats; optimizationError: string | null }> {
+): Promise<{ quantStats: QuantStats; optimizationError: OptimizationFailure | null }> {
   const { assetStats, matrixSymbols, covMatrix, corMatrix, expectedReturns, returnsBySymbol, benchAnnReturn } = prepared;
   let optimization = null;
   let portBeta = 0;
   let portCAPM = 0;
   let portAlpha = 0;
   let portDailyReturns: (number | null)[] = [];
-  let optimizationError: string | null = null;
+  let optimizationError: OptimizationFailure | null = null;
 
   try {
     const { minWeightsArr, maxWeightsArr } = resolveBounds(matrixSymbols, minWeights, maxWeights);
@@ -214,9 +214,14 @@ export async function optimizePreparedAnalysis(
     portCAPM = calculateCAPM(riskFreeRate, portBeta, benchAnnReturn);
     portAlpha = calculateJensensAlpha(optimization.optimal.expectedReturn, portCAPM);
     portDailyReturns = portfolioDailyReturns(matrixSymbols, returnsBySymbol, weights);
-  } catch (e: any) {
+  } catch (e) {
     console.log("Could not optimize portfolio", e);
-    optimizationError = e?.message || "Could not optimize portfolio.";
+    if (e instanceof ConstraintError) {
+      const { sum, min, max, assetIndex } = e.details;
+      optimizationError = { code: e.code, sum, min, max, symbol: assetIndex !== undefined ? matrixSymbols[assetIndex] : undefined };
+    } else {
+      optimizationError = { code: 'generic' };
+    }
   }
 
   return {

@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { useI18n } from '../../i18n';
 import { SectionTitle } from '../ui/SectionTitle';
 import type { QuantStats } from '../../types';
 
@@ -9,23 +10,24 @@ const PIE_COLORS = [
 ];
 
 export function OptimalWeightsWidget({ quantStats }: { quantStats: QuantStats }) {
+  const { t, f } = useI18n();
   const weights = quantStats.optimization!.optimal.weights;
   const data = quantStats.matrixSymbols
     .map((sym, i) => ({ name: sym, value: weights[i] }))
     .sort((a, b) => b.value - a.value);
 
   return (
-    <div className="flex flex-col h-full bg-white border border-[#141414]">
+    <div className="flex flex-col h-full bg-white border border-ink">
       <div className="flex justify-between items-end mb-2">
-        <SectionTitle>Optimal Weights (Max Sharpe)</SectionTitle>
+        <SectionTitle>{t('weights.title')}</SectionTitle>
       </div>
-      <div className="flex-1 bg-white border border-[#141414] p-4 flex flex-col md:flex-row items-center justify-between min-h-[300px]">
+      <div className="flex-1 bg-white border border-ink p-4 flex flex-col md:flex-row items-center justify-between min-h-[300px]">
         <div className="w-full md:w-1/2 mb-4 md:mb-0">
           <table className="w-full text-left border-collapse text-xs font-mono">
             <thead>
-              <tr className="border-b border-[#141414] bg-[#f9f9f9]">
-                <th className="p-2 border-r border-zinc-200">Asset</th>
-                <th className="p-2 text-right">Weight</th>
+              <tr className="border-b border-ink bg-panel">
+                <th className="p-2 border-r border-zinc-200">{t('col.asset')}</th>
+                <th className="p-2 text-right">{t('col.weight')}</th>
               </tr>
             </thead>
             <tbody>
@@ -35,7 +37,7 @@ export function OptimalWeightsWidget({ quantStats }: { quantStats: QuantStats })
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}></div>
                     {item.name}
                   </td>
-                  <td className="p-2 text-right">{(item.value * 100).toFixed(2)}%</td>
+                  <td className="p-2 text-right">{f.pct(item.value)}</td>
                 </tr>
               ))}
             </tbody>
@@ -50,7 +52,7 @@ export function OptimalWeightsWidget({ quantStats }: { quantStats: QuantStats })
                   <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value: number) => `${(value * 100).toFixed(2)}%`} />
+              <Tooltip formatter={(value: number) => f.pct(value)} />
             </PieChart>
           </ResponsiveContainer>
         </div>

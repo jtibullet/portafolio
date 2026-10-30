@@ -5,8 +5,9 @@ import { buildRecommendations } from '../engine/recommendations';
 import { runMonteCarlo, type MonteCarloResult } from '../monteCarlo';
 import type { ARIMA_Forecast, AlphaSignalResult } from '../utils/quantMath';
 import type { MarketDataState } from './useMarketData';
+import { useI18n } from '../i18n';
 import type {
-  BlackLittermanStats, InvestorView, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
+  BlackLittermanStats, InvestorView, OptimizationFailure, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
 } from '../types';
 
 /**
@@ -16,7 +17,7 @@ import type {
 export function usePortfolioAnalysis(marketData: MarketDataState | null, params: PortfolioParams) {
   const [quantStats, setQuantStats] = useState<QuantStats | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [optimizationError, setOptimizationError] = useState<string | null>(null);
+  const [optimizationError, setOptimizationError] = useState<OptimizationFailure | null>(null);
   const [arimaForecasts, setArimaForecasts] = useState<Record<string, ARIMA_Forecast>>({});
   const [alphaSignals, setAlphaSignals] = useState<Record<string, AlphaSignalResult>>({});
   const { selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights } = params;
@@ -144,6 +145,7 @@ export function useRecommendations(quantStats: QuantStats | null, riskFreeRate: 
 }
 
 export function useSavedPortfolios() {
+  const { t } = useI18n();
   const [savedPortfolios, setSavedPortfolios] = useState<SavedPortfolio[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -175,15 +177,15 @@ export function useSavedPortfolios() {
         })
       });
       if (res.ok) {
-        alert("Portfolio saved successfully!");
+        alert(t('save.ok'));
         await refresh();
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(`Failed to save portfolio${data.error ? `: ${data.error}` : ''}`);
+        alert(data.error ? t('save.failedWith', { error: data.error }) : t('save.failed'));
       }
     } catch (err) {
       console.error('Failed to save portfolio', err);
-      alert("Failed to save portfolio");
+      alert(t('save.failed'));
     } finally {
       setSaving(false);
     }
