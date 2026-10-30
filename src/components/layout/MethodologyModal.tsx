@@ -16,6 +16,10 @@ const FORMULAS = {
   prior: <>Π = δ Σ w<sub>mkt</sub></>,
   posterior: <>E[R] = [ (τΣ)<sup>-1</sup> + P<sup>T</sup>Ω<sup>-1</sup>P ]<sup>-1</sup> [ (τΣ)<sup>-1</sup>Π + P<sup>T</sup>Ω<sup>-1</sup>Q ]</>,
   gbm: <>S<sub>t</sub> = S<sub>t-1</sub> exp[ μ<sub>log</sub> dt + σ√dt Z ]</>,
+  ledoitWolf: <>Σ<sub>LW</sub> = δ m I + (1 − δ) S,  m = tr(S) / n</>,
+  riskParity: <>w<sub>i</sub> (Σw)<sub>i</sub> = w<sub>j</sub> (Σw)<sub>j</sub>  ∀ i, j</>,
+  sortino: <>Sortino = (R<sub>p</sub> − R<sub>f</sub>) / σ<sub>down</sub>,  Calmar = R<sub>p</sub> / MDD</>,
+  cost: <>C = |V| × (c + s / 2 + f<sub>x</sub>)</>,
 };
 
 const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Section[] }> = {
@@ -56,7 +60,7 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
       {
         title: '4. Modelo de Black-Litterman (actualización bayesiana)',
         blocks: [
-          { kind: 'p', parts: ['Para reducir la sensibilidad de Markowitz a los retornos históricos se usa el modelo de ', { term: 'Black-Litterman', tip: 'Combina los retornos de equilibrio del mercado (implícitos según CAPM) con las vistas del inversionista mediante inferencia bayesiana.' }, '. Primero se calculan los retornos implícitos de equilibrio (Π) por optimización inversa:'] },
+          { kind: 'p', parts: ['Para reducir la sensibilidad de Markowitz a los retornos históricos se usa el modelo de ', { term: 'Black-Litterman', tip: 'Combina los retornos de equilibrio del mercado (implícitos según CAPM) con las vistas del inversionista mediante inferencia bayesiana.' }, '. Primero se calculan los retornos implícitos de equilibrio (Π) por optimización inversa, con w_mkt igual a los pesos por capitalización de mercado (o pesos iguales si falta algún dato):'] },
           { kind: 'formula', formula: 'prior' },
           { kind: 'p', parts: ['Luego se incorporan tus vistas absolutas (matrices P y Q). La incertidumbre de cada vista (matriz diagonal Ω) se obtiene con el ', { term: 'método de Idzorek', tip: 'Traduce un porcentaje de confianza (0–100 %) en varianza estadística, sin que tengas que estimar varianzas a mano.' }, '. El retorno esperado posterior es:'] },
           { kind: 'formula', formula: 'posterior' },
@@ -68,6 +72,78 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
           { kind: 'p', parts: ['Para proyectar el valor futuro y medir riesgos extremos se usa un ', { term: 'movimiento browniano geométrico', tip: 'Proceso estocástico en que el logaritmo del precio sigue un movimiento browniano.' }, ' con 10.000 trayectorias independientes del portafolio óptimo:'] },
           { kind: 'formula', formula: 'gbm' },
           { kind: 'p', parts: ['μ', 'ₗₒᵍ', ' es el promedio anualizado de los retornos logarítmicos (ya descuenta el efecto de la volatilidad) y Z es una normal estándar. De la distribución final se obtienen el ', { term: 'percentil 5 (valor en riesgo)', tip: 'Con 95 % de confianza, el portafolio terminará por sobre este valor.' }, ' y el percentil 95.'] },
+        ],
+      },
+      {
+        title: '6. Covarianza con contracción (Ledoit-Wolf)',
+        blocks: [
+          { kind: 'p', parts: ['Con pocos años de datos y muchos activos, la covarianza muestral S es ruidosa y el optimizador explota sus errores. Por defecto se usa la ', { term: 'contracción de Ledoit-Wolf', tip: 'Ledoit y Wolf (2004) calculan la intensidad δ que minimiza el error cuadrático esperado frente a la covarianza verdadera.' }, ', que mezcla S con un objetivo de varianza común:'] },
+          { kind: 'formula', formula: 'ledoitWolf' },
+          { kind: 'p', parts: ['La intensidad δ (entre 0 y 1) se estima de los propios datos y se muestra en la tabla comparativa. Las correlaciones mostradas siguen siendo las muestrales; puedes volver a la covarianza muestral en el panel de parámetros.'] },
+        ],
+      },
+      {
+        title: '7. Objetivos de optimización',
+        blocks: [
+          { kind: 'p', parts: ['Además del máximo Sharpe, el motor calcula tres portafolios alternativos y los compara lado a lado:'] },
+          { kind: 'list', items: [
+            [{ term: 'Mínima varianza', tip: 'Ignora los retornos esperados, que son la estimación más ruidosa, y minimiza solo el riesgo.' }, ': min wᵀΣw con las mismas restricciones.'],
+            [{ term: 'Paridad de riesgo', tip: 'Equal Risk Contribution, resuelto por descenso coordenado cíclico (Spinu, 2013).' }, ': cada activo aporta la misma fracción del riesgo total:'],
+            [{ term: 'HRP', tip: 'Hierarchical Risk Parity (López de Prado, 2016): agrupa los activos por correlación y reparte el capital por bisección recursiva, sin invertir la matriz de covarianza.' }, ': agrupamiento jerárquico (enlace simple) y reparto inverso a la varianza de cada grupo.'],
+          ] },
+          { kind: 'formula', formula: 'riskParity' },
+          { kind: 'p', parts: ['Paridad de riesgo y HRP no admiten límites por activo de forma nativa, así que sus pesos se ', { term: 'proyectan a los límites', tip: 'Se recortan los pesos fuera de rango y la diferencia se reparte en proporción al margen que le queda a cada activo.' }, ' mínimo y máximo configurados.'] },
+        ],
+      },
+      {
+        title: '8. Métricas de riesgo de cola',
+        blocks: [
+          { kind: 'p', parts: ['El ', { term: 'ratio de Sortino', tip: 'Como el Sharpe, pero solo penaliza la volatilidad de los días bajo la tasa libre de riesgo.' }, ' y el ', { term: 'ratio de Calmar', tip: 'Retorno anualizado dividido por la máxima caída histórica.' }, ' complementan al Sharpe:'] },
+          { kind: 'formula', formula: 'sortino' },
+          { kind: 'p', parts: ['La ', { term: 'máxima caída', tip: 'La mayor pérdida desde un máximo previo hasta un mínimo posterior, con los pesos óptimos aplicados a la historia.' }, ' y los días hábiles que tardó en recuperar el máximo anterior se calculan sobre la serie histórica del portafolio.'] },
+        ],
+      },
+      {
+        title: '9. Costos de transacción',
+        blocks: [
+          { kind: 'p', parts: ['La calculadora de inversión estima el costo de cada compra o venta con la comisión del broker, la mitad del ', { term: 'spread', tip: 'Diferencia entre el precio de compra y de venta; al operar se paga en promedio la mitad.' }, ' y, cuando la moneda de pago difiere de la del activo (acciones .SN en CLP, el resto en USD), el costo de conversión (V es el monto operado, c la comisión, s el spread y fₓ el costo cambiario):'] },
+          { kind: 'formula', formula: 'cost' },
+        ],
+      },
+      {
+        title: '6. Shrinkage covariance (Ledoit-Wolf)',
+        blocks: [
+          { kind: 'p', parts: ['With few years of data and many assets the sample covariance S is noisy and the optimizer exploits its errors. By default the engine uses ', { term: 'Ledoit-Wolf shrinkage', tip: 'Ledoit & Wolf (2004) derive the intensity δ that minimizes the expected squared error against the true covariance.' }, ', which blends S with a common-variance target:'] },
+          { kind: 'formula', formula: 'ledoitWolf' },
+          { kind: 'p', parts: ['The intensity δ (between 0 and 1) is estimated from the data itself and shown in the comparison table. Displayed correlations remain the sample ones; you can switch back to the sample covariance in the parameters panel.'] },
+        ],
+      },
+      {
+        title: '7. Optimization objectives',
+        blocks: [
+          { kind: 'p', parts: ['Besides maximum Sharpe, the engine builds three alternative portfolios and compares them side by side:'] },
+          { kind: 'list', items: [
+            [{ term: 'Minimum variance', tip: 'Ignores expected returns, the noisiest estimate, and minimizes risk alone.' }, ': min wᵀΣw under the same constraints.'],
+            [{ term: 'Risk parity', tip: 'Equal Risk Contribution, solved by cyclical coordinate descent (Spinu, 2013).' }, ': every asset contributes the same share of total risk:'],
+            [{ term: 'HRP', tip: 'Hierarchical Risk Parity (López de Prado, 2016): clusters assets by correlation and allocates by recursive bisection, without inverting the covariance matrix.' }, ': hierarchical clustering (single linkage) and inverse-variance allocation between clusters.'],
+          ] },
+          { kind: 'formula', formula: 'riskParity' },
+          { kind: 'p', parts: ['Risk parity and HRP do not support per-asset bounds natively, so their weights are ', { term: 'projected onto the bounds', tip: 'Out-of-range weights are clipped and the gap is spread in proportion to the room each asset has left.' }, ' you configured.'] },
+        ],
+      },
+      {
+        title: '8. Tail-risk metrics',
+        blocks: [
+          { kind: 'p', parts: ['The ', { term: 'Sortino ratio', tip: 'Like Sharpe, but only penalizes volatility on days below the risk-free rate.' }, ' and the ', { term: 'Calmar ratio', tip: 'Annualized return divided by the maximum historical drawdown.' }, ' complement Sharpe:'] },
+          { kind: 'formula', formula: 'sortino' },
+          { kind: 'p', parts: ['The ', { term: 'maximum drawdown', tip: 'The largest loss from a previous peak to a later trough, applying the optimal weights to history.' }, ' and the trading days it took to regain the previous peak are computed on the portfolio\'s historical series.'] },
+        ],
+      },
+      {
+        title: '9. Transaction costs',
+        blocks: [
+          { kind: 'p', parts: ['The investment calculator estimates the cost of each buy or sell from the broker commission, half the ', { term: 'spread', tip: 'Gap between bid and ask prices; on average a trade pays half of it.' }, ' and, when the payment currency differs from the asset\'s (.SN stocks in CLP, the rest in USD), the conversion cost (V is the traded amount, c the commission, s the spread and fₓ the FX cost):'] },
+          { kind: 'formula', formula: 'cost' },
         ],
       },
     ],
@@ -109,7 +185,7 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
       {
         title: '4. Black-Litterman model (Bayesian updating)',
         blocks: [
-          { kind: 'p', parts: ['To reduce Markowitz\'s sensitivity to historical returns, the ', { term: 'Black-Litterman', tip: 'Combines market equilibrium returns (implied by CAPM) with investor views using Bayesian inference.' }, ' model is used. Implied equilibrium returns (Π) come from reverse optimization:'] },
+          { kind: 'p', parts: ['To reduce Markowitz\'s sensitivity to historical returns, the ', { term: 'Black-Litterman', tip: 'Combines market equilibrium returns (implied by CAPM) with investor views using Bayesian inference.' }, ' model is used. Implied equilibrium returns (Π) come from reverse optimization, with w_mkt set to market-cap weights (or equal weights when any cap is missing):'] },
           { kind: 'formula', formula: 'prior' },
           { kind: 'p', parts: ['Your absolute views (P and Q matrices) are then added. The uncertainty of each view (diagonal Ω matrix) comes from ', { term: "Idzorek's method", tip: 'Translates a confidence percentage (0–100%) into statistical variance, so you do not need to estimate variances by hand.' }, '. The posterior expected return is:'] },
           { kind: 'formula', formula: 'posterior' },

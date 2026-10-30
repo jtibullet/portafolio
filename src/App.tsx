@@ -96,7 +96,7 @@ function Workspace() {
 
   const { quantStats, isOptimizing, optimizationError, arimaForecasts, alphaSignals } = usePortfolioAnalysis(marketData, params);
   const [views, setViews] = useInvestorViews(quantStats);
-  const blStats = useBlackLitterman(quantStats, views, marketData, params);
+  const blStats = useBlackLitterman(quantStats, views, marketData, params, metadata);
   const mcResult = useMonteCarlo(activeTab === 'analytics', quantStats, mcYears, mcInitialAmount);
   const { recommendations, isLoading: recommendationsLoading } = useRecommendations(quantStats, params.riskFreeRate, params.selectedTickers);
   const { savedPortfolios, saving, savePortfolio } = useSavedPortfolios();

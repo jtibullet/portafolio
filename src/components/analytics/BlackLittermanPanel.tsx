@@ -22,6 +22,9 @@ function ViewsTable({ quantStats, blStats, views, setViews }: {
       <SectionHeader title={t('bl.title')}>
         <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline">{t('bl.subtitle')}</span>
       </SectionHeader>
+      <p className={`text-[10px] font-mono mb-2 ${blStats.priorSource === 'equal' ? 'text-orange-600' : 'text-zinc-500'}`}>
+        {t(blStats.priorSource === 'marketCap' ? 'bl.priorMarketCap' : 'bl.priorEqual')}
+      </p>
       <div className="bg-white border border-ink overflow-hidden overflow-x-auto p-2 sm:p-4">
         <table className="w-full text-left border-collapse">
           <thead>

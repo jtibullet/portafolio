@@ -47,7 +47,9 @@ export function CoreMetricsWidget({ quantStats, params }: { quantStats: QuantSta
               <th className={`${th} text-right`}>{t('col.sharpe')}</th>
               <th className={`${th} text-right`}>{t('col.beta')}</th>
               <th className={`${th} text-right`}>{t('col.capm')}</th>
-              <th className="p-2 text-[10px] font-serif italic text-right whitespace-nowrap">{t('col.alpha')}</th>
+              <th className={`${th} text-right`}>{t('col.alpha')}</th>
+              <th className={`${th} text-right`}>{t('col.sortino')}</th>
+              <th className="p-2 text-[10px] font-serif italic text-right whitespace-nowrap">{t('col.maxDrawdown')}</th>
             </tr>
           </thead>
           <tbody className="font-mono text-[11px]">
@@ -59,9 +61,11 @@ export function CoreMetricsWidget({ quantStats, params }: { quantStats: QuantSta
                 <td className={td} title={t('tip.sharpe')}>{f.num(stat.sharpeRatio)}</td>
                 <td className={td} title={t('tip.beta')}>{f.num(stat.beta, 3)}</td>
                 <td className={td} title={t('tip.capm')}>{f.pct(stat.capmExpectedReturn)}</td>
-                <td className={cn("p-2 text-right font-bold cursor-help whitespace-nowrap", stat.alpha >= 0 ? "text-green-600" : "text-red-600")} title={t('tip.alpha')}>
+                <td className={cn(td, "font-bold", stat.alpha >= 0 ? "text-green-600" : "text-red-600")} title={t('tip.alpha')}>
                   {f.pct(stat.alpha)}
                 </td>
+                <td className={td} title={t('tip.sortino')}>{f.num(stat.sortino)}</td>
+                <td className="p-2 text-right cursor-help whitespace-nowrap text-red-600" title={t('tip.maxDrawdown')}>-{f.pct(stat.maxDrawdown, 1)}</td>
               </tr>
             ))}
           </tbody>

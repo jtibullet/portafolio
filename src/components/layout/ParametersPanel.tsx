@@ -5,7 +5,9 @@ import { useI18n } from '../../i18n';
 import { useCollapsible } from '../../hooks/useUiState';
 import { BENCHMARKS, DEFAULT_MAX_WEIGHT, defaultMinWeight, HORIZON_OPTIONS, MAX_ASSETS, POPULAR_TICKERS } from '../../constants';
 import type { PortfolioParamsControls } from '../../hooks/usePortfolioParams';
-import type { WeightBounds } from '../../types';
+import type { CovarianceMethod, Objective, WeightBounds } from '../../types';
+
+const OBJECTIVES: Objective[] = ['maxSharpe', 'minVariance', 'riskParity', 'hrp'];
 
 const labelClass = "block text-[10px] uppercase tracking-wider text-zinc-500 font-bold";
 
@@ -228,6 +230,47 @@ function ConcentrationLimits({ controls }: { controls: PortfolioParamsControls }
   );
 }
 
+/** Portfolio construction rule and covariance estimator. */
+function MethodSettings({ controls }: { controls: PortfolioParamsControls }) {
+  const { t } = useI18n();
+  const { params: { objective, covarianceMethod }, setObjective, setCovarianceMethod } = controls;
+  return (
+    <div className="pt-4 border-t border-zinc-200 mt-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="space-y-2">
+        <label htmlFor="objective" className={labelClass}>{t('params.objective')}</label>
+        <select
+          id="objective"
+          value={objective}
+          onChange={(e) => setObjective(e.target.value as Objective)}
+          className="w-full bg-zinc-50 p-2 text-sm sm:text-xs border border-zinc-300 text-ink focus:outline-none focus:border-ink rounded-sm"
+        >
+          {OBJECTIVES.map(o => <option key={o} value={o}>{t(`objective.${o}`)}</option>)}
+        </select>
+        <p className="text-[10px] text-zinc-500">{t(`objective.hint.${objective}`)}</p>
+      </div>
+      <div className="space-y-2">
+        <span className={labelClass}>{t('params.covariance')}</span>
+        <div className="flex border border-zinc-300 overflow-hidden rounded-sm" role="group" aria-label={t('params.covariance')}>
+          {(['ledoitWolf', 'sample'] as CovarianceMethod[]).map((m, i) => (
+            <button
+              key={m}
+              onClick={() => setCovarianceMethod(m)}
+              aria-pressed={covarianceMethod === m}
+              className={cn(
+                "flex-1 py-2 text-[10px] font-bold uppercase transition-colors",
+                covarianceMethod === m ? "bg-ink text-paper" : "bg-zinc-50 hover:bg-zinc-200 text-ink",
+                i > 0 && "border-l border-zinc-300"
+              )}
+            >
+              {t(`cov.${m}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RunButton({ dataLoading, disabled, onClick, compact = false }: {
   dataLoading: boolean;
   disabled: boolean;
@@ -342,6 +385,8 @@ export function ParametersPanel({ controls, dataLoading, onRun }: {
               </div>
             </div>
           </div>
+
+          <MethodSettings controls={controls} />
 
           <ConcentrationLimits controls={controls} />
 

@@ -1,4 +1,8 @@
-import type { ConstraintCode, PortfolioOptimization } from './optimization';
+import type { ConstraintCode, Objective, OptimizationResult, PortfolioOptimization } from './optimization';
+import type { RiskMetrics } from './engine/riskMetrics';
+
+export type { Objective } from './optimization';
+export type CovarianceMethod = 'sample' | 'ledoitWolf';
 
 export type TabId = 'dashboard' | 'analytics' | 'ai' | 'validation';
 
@@ -13,6 +17,9 @@ export interface AssetStat {
   capmExpectedReturn: number;
   alpha: number;
   sharpeRatio: number;
+  sortino: number;
+  maxDrawdown: number;
+  recoveryDays: number | null;
 }
 
 export interface QuantStats {
@@ -21,7 +28,16 @@ export interface QuantStats {
   matrixSymbols: string[];
   covarianceMatrix: number[][];
   correlationMatrix: number[][];
+  /** Portfolio for the selected objective, plus the max-Sharpe frontier and sample cloud */
   optimization: PortfolioOptimization | null;
+  objective: Objective;
+  /** The portfolio each objective would produce, for comparison */
+  alternatives: Partial<Record<Objective, OptimizationResult>>;
+  covarianceMethod: CovarianceMethod;
+  /** Ledoit-Wolf shrinkage intensity δ when that estimator was used */
+  covarianceShrinkage: number | null;
+  /** Sortino, drawdown and Calmar of the selected portfolio over the historical period */
+  portfolioRisk: RiskMetrics | null;
   portBeta: number;
   portCAPM: number;
   portAlpha: number;
@@ -37,6 +53,8 @@ export interface StressTestResult {
 }
 
 export interface BlackLittermanStats {
+  /** Market portfolio behind the implied returns: cap-weighted, or equal when caps are missing */
+  priorSource: 'marketCap' | 'equal';
   pi: number[];
   blReturns: number[];
   blCovariance: number[][];
@@ -126,6 +144,8 @@ export interface PortfolioParams {
   useArimaForecast: boolean;
   minWeights: WeightBounds;
   maxWeights: WeightBounds;
+  objective: Objective;
+  covarianceMethod: CovarianceMethod;
 }
 
 /** Why the optimizer could not produce a portfolio; rendered as a translated message. */

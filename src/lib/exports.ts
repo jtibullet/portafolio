@@ -55,7 +55,10 @@ export function downloadStrategyJSON(quantStats: QuantStats, params: PortfolioPa
       benchmark: params.selectedBenchmark,
       horizonYears: params.horizonYears,
       riskFreeRate: params.riskFreeRate,
-      useArimaForecast: params.useArimaForecast
+      useArimaForecast: params.useArimaForecast,
+      objective: quantStats.objective,
+      covarianceMethod: quantStats.covarianceMethod,
+      covarianceShrinkage: quantStats.covarianceShrinkage
     },
     optimizationResults: {
       portfolioMetrics: {
@@ -64,7 +67,8 @@ export function downloadStrategyJSON(quantStats: QuantStats, params: PortfolioPa
         sharpeRatio: optimal.sharpeRatio,
         beta: quantStats.portBeta,
         capmExpectedReturn: quantStats.portCAPM,
-        alpha: quantStats.portAlpha
+        alpha: quantStats.portAlpha,
+        ...quantStats.portfolioRisk
       },
       weights: quantStats.assetStats.map((stat, i) => ({ symbol: stat.symbol, weight: optimal.weights[i] })),
       assetMetrics: quantStats.assetStats.map(stat => ({

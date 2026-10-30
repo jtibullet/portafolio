@@ -15,8 +15,9 @@ function MetricCard({ label, children }: { label: string; children: React.ReactN
 export function PortfolioMetricsWidget({ quantStats }: { quantStats: QuantStats }) {
   const { t, f } = useI18n();
   const optimal = quantStats.optimization!.optimal;
+  const risk = quantStats.portfolioRisk;
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 h-full">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 h-full">
       <MetricCard label={t('metrics.expectedReturn')}>
         <div className="text-lg sm:text-xl font-mono">{f.pct(optimal.expectedReturn)}</div>
       </MetricCard>
@@ -37,6 +38,22 @@ export function PortfolioMetricsWidget({ quantStats }: { quantStats: QuantStats 
           {f.pct(quantStats.portAlpha)}
         </div>
       </MetricCard>
+      {risk && (<>
+        <MetricCard label={t('metrics.sortino')}>
+          <div className="text-lg sm:text-xl font-mono">{f.num(risk.sortino, 3)}</div>
+        </MetricCard>
+        <MetricCard label={t('metrics.maxDrawdown')}>
+          <div className="text-lg sm:text-xl font-mono text-red-600">-{f.pct(risk.maxDrawdown)}</div>
+        </MetricCard>
+        <MetricCard label={t('metrics.calmar')}>
+          <div className="text-lg sm:text-xl font-mono">{f.num(risk.calmar)}</div>
+        </MetricCard>
+        <MetricCard label={t('metrics.recovery')}>
+          <div className="text-lg sm:text-xl font-mono">
+            {risk.recoveryDays === null ? t('metrics.notRecovered') : t('metrics.recoveryDays', { n: risk.recoveryDays })}
+          </div>
+        </MetricCard>
+      </>)}
     </div>
   );
 }

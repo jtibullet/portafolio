@@ -54,7 +54,7 @@ export const POPULAR_TICKERS = [
   { symbol: 'ITA', name: 'iShares U.S. Aerospace & Defense ETF' }
 ];
 
-export const DEFAULT_DASHBOARD_WIDGETS = ['coreMetrics', 'historicalBacktester', 'correlationHeatmap', 'optimalWeights', 'efficientFrontier', 'sectorBreakdown', 'portfolioMetrics', 'factorInvesting'];
+export const DEFAULT_DASHBOARD_WIDGETS = ['coreMetrics', 'historicalBacktester', 'correlationHeatmap', 'optimalWeights', 'efficientFrontier', 'objectiveComparison', 'sectorBreakdown', 'portfolioMetrics', 'factorInvesting'];
 
 export const DEFAULT_WIDGET_SIZES: Record<string, number> = {
   coreMetrics: 3,
@@ -62,6 +62,7 @@ export const DEFAULT_WIDGET_SIZES: Record<string, number> = {
   correlationHeatmap: 3,
   optimalWeights: 2,
   efficientFrontier: 4,
+  objectiveComparison: 6,
   sectorBreakdown: 6,
   portfolioMetrics: 6,
   factorInvesting: 6
