@@ -8,7 +8,7 @@ import {
   type ARIMA_Forecast, type AlphaSignalResult,
 } from '../utils/quantMath';
 import { ConstraintError, optimizePortfolio } from '../optimization';
-import { DEFAULT_MAX_WEIGHT, DEFAULT_MIN_WEIGHT, OPTIMIZER_SIMULATIONS, TRADING_DAYS } from '../constants';
+import { DEFAULT_MAX_WEIGHT, defaultMinWeight, FRONTIER_CHART_SAMPLES, TRADING_DAYS } from '../constants';
 import type { AssetStat, OptimizationFailure, PriceRow, QuantStats, WeightBounds } from '../types';
 
 export type SeriesBySymbol = Record<string, (number | null)[]>;
@@ -118,7 +118,7 @@ export function computeAlphaSignals(symbols: string[], pricesBySymbol: SeriesByS
 
 export function resolveBounds(symbols: string[], minWeights: WeightBounds, maxWeights: WeightBounds) {
   return {
-    minWeightsArr: symbols.map(sym => minWeights[sym] !== undefined ? minWeights[sym] : DEFAULT_MIN_WEIGHT),
+    minWeightsArr: symbols.map(sym => minWeights[sym] !== undefined ? minWeights[sym] : defaultMinWeight(symbols.length)),
     maxWeightsArr: symbols.map(sym => maxWeights[sym] !== undefined ? maxWeights[sym] : DEFAULT_MAX_WEIGHT),
   };
 }
@@ -207,7 +207,7 @@ export async function optimizePreparedAnalysis(
 
   try {
     const { minWeightsArr, maxWeightsArr } = resolveBounds(matrixSymbols, minWeights, maxWeights);
-    optimization = await optimizePortfolio(expectedReturns, covMatrix, riskFreeRate, OPTIMIZER_SIMULATIONS, undefined, maxWeightsArr, minWeightsArr);
+    optimization = await optimizePortfolio(expectedReturns, covMatrix, riskFreeRate, FRONTIER_CHART_SAMPLES, undefined, maxWeightsArr, minWeightsArr);
 
     const weights = optimization.optimal.weights;
     portBeta = assetStats.reduce((sum, stat, i) => sum + stat.beta * weights[i], 0);

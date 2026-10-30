@@ -45,10 +45,20 @@ GitHub Actions runs the type check, tests and build on every pull request.
 | Path | Contents |
 |---|---|
 | `src/engine/` | Pure analysis pipeline: statistics, optimization inputs, Black-Litterman, recommendations, chart data |
-| `src/utils/quantMath.ts`, `src/optimization.ts`, `src/advancedQuant.ts`, `src/monteCarlo.ts` | Core math |
-| `src/hooks/` | React state: parameters, market data, analysis, server data, UI state |
+| `src/optimization.ts`, `src/qp.ts` | Exact max-Sharpe / min-variance optimizer (quadratic programming via `quadprog`) |
+| `src/utils/quantMath.ts`, `src/advancedQuant.ts`, `src/monteCarlo.ts` | Core math |
+| `src/worker/` | Web Worker that runs the analysis, Black-Litterman and Monte Carlo off the UI thread |
+| `src/hooks/` | React state: parameters, market data, analysis, server data, UI state, theme |
+| `src/i18n/` | Spanish/English text and locale-aware number formatting |
 | `src/components/<tab>/` | One folder per tab (`dashboard`, `analytics`, `ai`, `validation`), plus `layout` and shared `ui` |
-| `server.ts` | Express API (Yahoo Finance, SQLite) and static hosting |
+| `server.ts`, `server/` | Express API (Yahoo Finance, SQLite), price cache and static hosting |
+
+## Caching
+
+Daily prices are cached for 4 hours in `portfolios.db` (tables `price_history` and `price_fetches`),
+so repeated runs don't call Yahoo Finance again. The exchange rate is cached for 1 minute and company
+metadata for 12 hours (in memory). Deleting the two price tables, or the whole file, clears the cache —
+note that the file also holds your saved portfolios.
 
 ## Legacy Python prototype (optional)
 

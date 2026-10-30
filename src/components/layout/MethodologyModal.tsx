@@ -45,11 +45,11 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
         blocks: [
           { kind: 'p', parts: ['El portafolio óptimo es el que ', { term: 'maximiza el ratio de Sharpe', tip: 'El ratio de Sharpe mide el retorno ajustado por riesgo: (retorno esperado − tasa libre de riesgo) / volatilidad. Su máximo es el portafolio tangente de la frontera eficiente.' }, ':'] },
           { kind: 'formula', formula: 'sharpe' },
-          { kind: 'p', parts: ['Donde w son los pesos, μ los retornos esperados, Σ la matriz de covarianza y R', 'ᵨ', ' la tasa libre de riesgo. Hoy la solución se busca evaluando 100.000 portafolios generados al azar que cumplen las restricciones:'] },
+          { kind: 'p', parts: ['Donde w son los pesos, μ los retornos esperados, Σ la matriz de covarianza y R', 'ᵨ', ' la tasa libre de riesgo. Maximizar el Sharpe se transforma en un problema cuadrático equivalente (Cornuéjols y Tütüncü) que se resuelve de forma exacta con el método de Goldfarb-Idnani, respetando las restricciones:'] },
           { kind: 'list', items: [
             [{ term: 'Totalmente invertido', tip: 'Los pesos suman exactamente 100 %; no hay apalancamiento.' }, ': Σ wᵢ = 1'],
             [{ term: 'Solo posiciones largas', tip: 'No se permiten ventas en corto: todos los pesos son positivos.' }, ': wᵢ ≥ 0'],
-            [{ term: 'Límites por activo', tip: 'Mínimo (5 % por defecto) y máximo configurables por activo en el panel de parámetros.' }, ': mínᵢ ≤ wᵢ ≤ máxᵢ'],
+            [{ term: 'Límites por activo', tip: 'Mínimo (5 % por defecto, menos con más de 10 activos) y máximo configurables por activo en el panel de parámetros.' }, ': mínᵢ ≤ wᵢ ≤ máxᵢ'],
           ] },
         ],
       },
@@ -98,11 +98,11 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
         blocks: [
           { kind: 'p', parts: ['The optimal portfolio is the one that ', { term: 'maximizes the Sharpe ratio', tip: 'The Sharpe ratio measures risk-adjusted return: (expected return − risk-free rate) / volatility. Its maximum is the tangency portfolio on the efficient frontier.' }, ':'] },
           { kind: 'formula', formula: 'sharpe' },
-          { kind: 'p', parts: ['Where w are the weights, μ the expected returns, Σ the covariance matrix and R', 'ᵨ', ' the risk-free rate. The solution is currently searched by evaluating 100,000 random portfolios that satisfy the constraints:'] },
+          { kind: 'p', parts: ['Where w are the weights, μ the expected returns, Σ the covariance matrix and R', 'ᵨ', ' the risk-free rate. Maximizing the Sharpe ratio is turned into an equivalent quadratic program (Cornuéjols & Tütüncü) and solved exactly with the Goldfarb-Idnani method, subject to the constraints:'] },
           { kind: 'list', items: [
             [{ term: 'Fully invested', tip: 'Weights add up to exactly 100%; no leverage.' }, ': Σ wᵢ = 1'],
             [{ term: 'Long-only', tip: 'No short selling: every weight is positive.' }, ': wᵢ ≥ 0'],
-            [{ term: 'Per-asset bounds', tip: 'Minimum (5% by default) and maximum set per asset in the parameters panel.' }, ': minᵢ ≤ wᵢ ≤ maxᵢ'],
+            [{ term: 'Per-asset bounds', tip: 'Minimum (5% by default, less with more than 10 assets) and maximum set per asset in the parameters panel.' }, ': minᵢ ≤ wᵢ ≤ maxᵢ'],
           ] },
         ],
       },

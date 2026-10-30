@@ -21,7 +21,7 @@ export function AnalyticsTab({ quantStats, blStats, views, setViews, mcResult, m
     <>
       {optimal && <ProbabilisticScenarios mu={optimal.expectedReturn} sigma={optimal.volatility} />}
       {blStats && optimal && <BlackLittermanPanel quantStats={quantStats} blStats={blStats} views={views} setViews={setViews} />}
-      <MonteCarloPanel result={mcResult} years={mcYears} setYears={setMcYears} initialAmount={mcInitialAmount} setInitialAmount={setMcInitialAmount} />
+      <MonteCarloPanel available={!!optimal} result={mcResult} years={mcYears} setYears={setMcYears} initialAmount={mcInitialAmount} setInitialAmount={setMcInitialAmount} />
     </>
   );
 }

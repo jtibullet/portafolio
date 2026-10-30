@@ -103,6 +103,7 @@ export const es = {
   'heatmap.title': 'Mapa de correlaciones',
   'heatmap.computing': 'Calculando matriz...',
   'weights.title': 'Pesos óptimos (máximo Sharpe)',
+  'weights.minVariance': 'Ningún portafolio permitido supera la tasa libre de riesgo, así que se muestra el de mínima varianza.',
   'frontier.title': 'Frontera eficiente',
   'frontier.xLabel': 'Volatilidad anualizada (riesgo)',
   'frontier.yLabel': 'Retorno esperado',
@@ -200,6 +201,7 @@ export const es = {
   'mc.day': 'Día {n}',
   'mc.count': 'Cantidad',
   'mc.yearTick': 'A{n}',
+  'mc.unavailable': 'La proyección necesita un portafolio optimizado. Revisa el aviso de optimización más arriba.',
 
   // AI & projections
   'analyst.title': '🎯 Precios objetivo de analistas (portafolio actual)',

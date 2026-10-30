@@ -3,7 +3,7 @@ import { Loader2, Play } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { useI18n } from '../../i18n';
 import { useCollapsible } from '../../hooks/useUiState';
-import { BENCHMARKS, DEFAULT_MAX_WEIGHT, DEFAULT_MIN_WEIGHT, HORIZON_OPTIONS, MAX_ASSETS, POPULAR_TICKERS } from '../../constants';
+import { BENCHMARKS, DEFAULT_MAX_WEIGHT, defaultMinWeight, HORIZON_OPTIONS, MAX_ASSETS, POPULAR_TICKERS } from '../../constants';
 import type { PortfolioParamsControls } from '../../hooks/usePortfolioParams';
 import type { WeightBounds } from '../../types';
 
@@ -101,12 +101,14 @@ function TickerPicker({ controls }: { controls: PortfolioParamsControls }) {
   );
 }
 
-const minOf = (bounds: WeightBounds, tk: string) => bounds[tk] !== undefined ? bounds[tk] : DEFAULT_MIN_WEIGHT;
+
 const maxOf = (bounds: WeightBounds, tk: string) => bounds[tk] !== undefined ? bounds[tk] : DEFAULT_MAX_WEIGHT;
 
 function ConcentrationLimits({ controls }: { controls: PortfolioParamsControls }) {
   const { t, f } = useI18n();
   const { params: { selectedTickers, minWeights, maxWeights }, setMinWeights, setMaxWeights } = controls;
+  const defaultMin = defaultMinWeight(selectedTickers.length);
+  const minOf = (bounds: WeightBounds, tk: string) => bounds[tk] !== undefined ? bounds[tk] : defaultMin;
 
   /** Sets the same min (or max) for every ticker, pushing the opposite bound so min <= max holds. */
   const applyGlobal = (kind: 'min' | 'max', value: string) => {
@@ -132,7 +134,7 @@ function ConcentrationLimits({ controls }: { controls: PortfolioParamsControls }
     const newMin: WeightBounds = {};
     selectedTickers.forEach(tk => {
       newMax[tk] = DEFAULT_MAX_WEIGHT;
-      newMin[tk] = DEFAULT_MIN_WEIGHT;
+      newMin[tk] = defaultMin;
     });
     setMaxWeights(newMax);
     setMinWeights(newMin);
@@ -149,7 +151,7 @@ function ConcentrationLimits({ controls }: { controls: PortfolioParamsControls }
               type="number"
               inputMode="decimal"
               min="0" max="100" step="1"
-              placeholder="5"
+              placeholder={f.num(defaultMin * 100, 0)}
               className="w-16 p-1 text-xs font-mono border border-zinc-300 bg-white"
               onBlur={(e) => applyGlobal('min', e.target.value)}
             />

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AlertTriangle, BarChart2, Loader2 } from 'lucide-react';
 import { useMarketData, type AppError } from './hooks/useMarketData';
 import { usePortfolioParams } from './hooks/usePortfolioParams';
@@ -9,14 +9,25 @@ import {
 import { useTheme } from './hooks/useTheme';
 import { UiStateProvider } from './hooks/useUiState';
 import { I18nProvider, useI18n } from './i18n';
+import { warmUpWorker } from './worker/client';
 import { AppHeader } from './components/layout/AppHeader';
 import { ParametersPanel } from './components/layout/ParametersPanel';
 import { WorkspaceTabs } from './components/layout/WorkspaceTabs';
-import { MethodologyModal } from './components/layout/MethodologyModal';
-import { DashboardTab } from './components/dashboard/DashboardTab';
-import { AnalyticsTab } from './components/analytics/AnalyticsTab';
-import { AiTab } from './components/ai/AiTab';
-import { ValidationTab } from './components/validation/ValidationTab';
+
+// Tabs and the methodology are loaded on demand so the first page load only needs the shell
+const MethodologyModal = lazy(() => import('./components/layout/MethodologyModal').then(m => ({ default: m.MethodologyModal })));
+const DashboardTab = lazy(() => import('./components/dashboard/DashboardTab').then(m => ({ default: m.DashboardTab })));
+const AnalyticsTab = lazy(() => import('./components/analytics/AnalyticsTab').then(m => ({ default: m.AnalyticsTab })));
+const AiTab = lazy(() => import('./components/ai/AiTab').then(m => ({ default: m.AiTab })));
+const ValidationTab = lazy(() => import('./components/validation/ValidationTab').then(m => ({ default: m.ValidationTab })));
+
+/** Loads the analysis worker and the dashboard code while the user is still choosing parameters. */
+function usePreloadResults() {
+  useEffect(() => {
+    warmUpWorker();
+    import('./components/dashboard/DashboardTab');
+  }, []);
+}
 import type { OptimizationFailure, TabId } from './types';
 
 function Banner({ title, children }: { title: string; children: ReactNode }) {
@@ -68,6 +79,7 @@ function ResultsSkeleton() {
 }
 
 function Workspace() {
+  usePreloadResults();
   const { t, f, years } = useI18n();
   const theme = useTheme();
   const controls = usePortfolioParams();
@@ -89,6 +101,7 @@ function Workspace() {
   const { recommendations, isLoading: recommendationsLoading } = useRecommendations(quantStats, params.riskFreeRate, params.selectedTickers);
   const { savedPortfolios, saving, savePortfolio } = useSavedPortfolios();
   const optimizationMessage = useOptimizationMessage(optimizationError);
+  const handleSave = useCallback(() => { if (quantStats) savePortfolio(quantStats, params.riskFreeRate); }, [quantStats, savePortfolio, params.riskFreeRate]);
 
   const dataLoading = isFetching || isOptimizing;
   const historicalData = marketData?.historicalData || null;
@@ -126,6 +139,7 @@ function Workspace() {
 
         {/* Previous results stay visible while a parameter change is being re-optimized */}
         {showResults && (
+          <Suspense fallback={<ResultsSkeleton />}>
           <div className="flex-1 min-h-[500px] flex flex-col gap-6 sm:gap-8 pb-12">
             {activeTab === 'dashboard' && (
               <DashboardTab
@@ -135,7 +149,7 @@ function Workspace() {
                 isOptimizing={isOptimizing}
                 savedPortfolios={savedPortfolios}
                 saving={saving}
-                onSave={() => savePortfolio(quantStats!, params.riskFreeRate)}
+                onSave={handleSave}
               />
             )}
             {activeTab === 'analytics' && (
@@ -180,9 +194,14 @@ function Workspace() {
               <div>{t('footer.summary', { rows: f.num(historicalData!.length, 0), assets: symbols.length, rf: f.pct(params.riskFreeRate, 1) })}</div>
             </footer>
           </div>
+          </Suspense>
         )}
 
-        {showMethodology && <MethodologyModal onClose={() => setShowMethodology(false)} />}
+        {showMethodology && (
+          <Suspense fallback={null}>
+            <MethodologyModal onClose={() => setShowMethodology(false)} />
+          </Suspense>
+        )}
       </main>
     </div>
   );

@@ -98,6 +98,7 @@ export const en: Record<keyof typeof es, string> = {
   'heatmap.title': 'Correlation heatmap',
   'heatmap.computing': 'Computing matrix...',
   'weights.title': 'Optimal weights (max Sharpe)',
+  'weights.minVariance': 'No allowed portfolio beats the risk-free rate, so the minimum-variance portfolio is shown.',
   'frontier.title': 'Efficient frontier',
   'frontier.xLabel': 'Annualized volatility (risk)',
   'frontier.yLabel': 'Expected return',
@@ -193,6 +194,7 @@ export const en: Record<keyof typeof es, string> = {
   'mc.day': 'Day {n}',
   'mc.count': 'Count',
   'mc.yearTick': 'Y{n}',
+  'mc.unavailable': 'The projection needs an optimized portfolio. See the optimization notice above.',
 
   'analyst.title': '🎯 Analyst targets & expected growth (current portfolio)',
   'analyst.price': 'Current price (USD)',
