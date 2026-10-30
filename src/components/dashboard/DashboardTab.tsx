@@ -14,6 +14,7 @@ import { SectorBreakdownWidget } from './SectorBreakdownWidget';
 import { FactorInvestingWidget } from './FactorInvestingWidget';
 import { PortfolioMetricsWidget } from './PortfolioMetricsWidget';
 import { InvestmentCalculator } from './InvestmentCalculator';
+import { ObjectiveComparisonWidget } from './ObjectiveComparisonWidget';
 import { SavedPortfoliosHistory } from './SavedPortfoliosHistory';
 import type { AssetMetadata, PortfolioParams, QuantStats, SavedPortfolio } from '../../types';
 
@@ -47,6 +48,8 @@ function renderWidget(id: string, { quantStats, metadata, params, isOptimizing }
       return hasOptimization && metadata ? <SectorBreakdownWidget quantStats={quantStats} metadata={metadata} /> : null;
     case 'factorInvesting':
       return hasOptimization && metadata ? <FactorInvestingWidget metadata={metadata} quantStats={quantStats} /> : null;
+    case 'objectiveComparison':
+      return hasOptimization && Object.keys(quantStats.alternatives).length > 1 ? <ObjectiveComparisonWidget quantStats={quantStats} /> : null;
     case 'portfolioMetrics':
       return hasOptimization ? <PortfolioMetricsWidget quantStats={quantStats} /> : null;
     default:
@@ -57,7 +60,9 @@ function renderWidget(id: string, { quantStats, metadata, params, isOptimizing }
 /** Memoized: results arriving for other tabs (Black-Litterman, recommendations) must not redraw every chart here. */
 export const DashboardTab = React.memo(function DashboardTab(props: DashboardTabProps) {
   const { t } = useI18n();
-  const [widgets, setWidgets] = usePersistentState<string[]>('dashboardWidgets', DEFAULT_DASHBOARD_WIDGETS);
+  const [savedWidgets, setWidgets] = usePersistentState<string[]>('dashboardWidgets', DEFAULT_DASHBOARD_WIDGETS);
+  // A layout saved before a widget existed doesn't list it; show new widgets at the end
+  const widgets = [...savedWidgets, ...DEFAULT_DASHBOARD_WIDGETS.filter(id => !savedWidgets.includes(id))];
   const [sizes, setSizes] = usePersistentState<Record<string, number>>('widgetSizes', DEFAULT_WIDGET_SIZES);
 
   const sensors = useSensors(
@@ -68,7 +73,7 @@ export const DashboardTab = React.memo(function DashboardTab(props: DashboardTab
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      setWidgets(items => arrayMove(items, items.indexOf(active.id as string), items.indexOf(over.id as string)));
+      setWidgets(arrayMove(widgets, widgets.indexOf(active.id as string), widgets.indexOf(over.id as string)));
     }
   };
 

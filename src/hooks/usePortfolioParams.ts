@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_TICKERS, MAX_ASSETS } from '../constants';
-import type { PortfolioParams, WeightBounds } from '../types';
+import type { CovarianceMethod, Objective, PortfolioParams, WeightBounds } from '../types';
 
 /** The user's analysis inputs: assets, benchmark, horizon, risk-free rate, ARIMA toggle and weight bounds. */
 export function usePortfolioParams() {
@@ -11,6 +11,9 @@ export function usePortfolioParams() {
   const [useArimaForecast, setUseArimaForecast] = useState(false);
   const [minWeights, setMinWeights] = useState<WeightBounds>({});
   const [maxWeights, setMaxWeights] = useState<WeightBounds>({});
+  const [objective, setObjective] = useState<Objective>('maxSharpe');
+  // Shrinkage is the safer default: sample covariances are noisy and the optimizer amplifies the noise
+  const [covarianceMethod, setCovarianceMethod] = useState<CovarianceMethod>('ledoitWolf');
 
   /** Adds a ticker (uppercased); empty or duplicate input is ignored. */
   const addTicker = (ticker: string): 'added' | 'limit' | 'ignored' => {
@@ -25,13 +28,13 @@ export function usePortfolioParams() {
 
   // Stable identity so memoized children only re-render when an input actually changes
   const params: PortfolioParams = useMemo(() => ({
-    selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights,
-  }), [selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights]);
+    selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod,
+  }), [selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod]);
 
   return {
     params,
     setSelectedTickers, setSelectedBenchmark, setHorizonYears, setRiskFreeRate, setUseArimaForecast,
-    setMinWeights, setMaxWeights, addTicker, removeTicker,
+    setMinWeights, setMaxWeights, setObjective, setCovarianceMethod, addTicker, removeTicker,
   };
 }
 

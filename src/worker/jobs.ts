@@ -9,7 +9,7 @@ import { runMonteCarlo } from '../monteCarlo';
 export async function analyzeJob(input: AnalysisInput) {
   const prepared = prepareAnalysis(input);
   if (!prepared) return null;
-  const { quantStats, optimizationError } = await optimizePreparedAnalysis(prepared, input.riskFreeRate, input.minWeights, input.maxWeights);
+  const { quantStats, optimizationError } = await optimizePreparedAnalysis(prepared, input.riskFreeRate, input.minWeights, input.maxWeights, input.objective);
   return { quantStats, optimizationError, arimaForecasts: prepared.arimaForecasts, alphaSignals: prepared.alphaSignals };
 }
 

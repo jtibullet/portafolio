@@ -19,9 +19,9 @@ export function OptimalWeightsWidget({ quantStats }: { quantStats: QuantStats })
   return (
     <div className="flex flex-col h-full bg-white border border-ink">
       <div className="flex justify-between items-end mb-2">
-        <SectionTitle>{t('weights.title')}</SectionTitle>
+        <SectionTitle>{t('weights.title', { objective: t(`objective.${quantStats.objective}`) })}</SectionTitle>
       </div>
-      {method === 'minVariance' && (
+      {quantStats.objective === 'maxSharpe' && method === 'minVariance' && (
         <p className="text-[10px] font-mono text-orange-600 px-2 pb-2">{t('weights.minVariance')}</p>
       )}
       <div className="flex-1 bg-white border border-ink p-4 flex flex-col md:flex-row items-center justify-between min-h-[300px]">

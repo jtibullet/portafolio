@@ -83,6 +83,8 @@ describe('prepareAnalysis + optimizePreparedAnalysis', () => {
     useArimaForecast: false,
     minWeights: {},
     maxWeights: {},
+    objective: 'maxSharpe' as const,
+    covarianceMethod: 'sample' as const,
   };
 
   it('returns null when the benchmark has no data', () => {
@@ -114,6 +116,54 @@ describe('prepareAnalysis + optimizePreparedAnalysis', () => {
 
     const inverted = await optimizePreparedAnalysis(prepared, 0.02, { B: 0.5 }, { B: 0.2 });
     expect(inverted.optimizationError).toMatchObject({ code: 'minAboveMax', symbol: 'B', min: 0.5, max: 0.2 });
+  });
+});
+
+describe('objectives and covariance method', () => {
+  const syms = ['A', 'B', 'C', 'D', 'BENCH'];
+  const base = {
+    historicalData: makeRows(syms, 250),
+    symbols: syms,
+    selectedTickers: ['A', 'B', 'C', 'D'],
+    selectedBenchmark: 'BENCH',
+    riskFreeRate: 0.02,
+    useArimaForecast: false,
+    minWeights: {},
+    maxWeights: { A: 0.6, B: 0.6, C: 0.6, D: 0.6 },
+    objective: 'maxSharpe' as const,
+    covarianceMethod: 'ledoitWolf' as const,
+  };
+
+  it('uses the Ledoit-Wolf covariance when selected and reports the shrinkage', () => {
+    const lw = prepareAnalysis(base)!;
+    const sample = prepareAnalysis({ ...base, covarianceMethod: 'sample' })!;
+    expect(lw.covarianceMethod).toBe('ledoitWolf');
+    expect(lw.covarianceShrinkage).toBeGreaterThanOrEqual(0);
+    expect(sample.covarianceShrinkage).toBeNull();
+    expect(lw.covMatrix).not.toEqual(sample.covMatrix);
+    // The heatmap keeps sample correlations either way
+    expect(lw.corMatrix).toEqual(sample.corMatrix);
+  });
+
+  it('builds all four objectives within the bounds and uses the selected one', async () => {
+    for (const objective of ['maxSharpe', 'minVariance', 'riskParity', 'hrp'] as const) {
+      const prepared = prepareAnalysis(base)!;
+      const { quantStats } = await optimizePreparedAnalysis(prepared, 0.02, {}, base.maxWeights, objective);
+      expect(Object.keys(quantStats.alternatives).sort()).toEqual(['hrp', 'maxSharpe', 'minVariance', 'riskParity']);
+      for (const alt of Object.values(quantStats.alternatives)) {
+        expect(alt!.weights.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 8);
+        alt!.weights.forEach(w => { expect(w).toBeGreaterThanOrEqual(0.05 - 1e-4); expect(w).toBeLessThanOrEqual(0.6 + 1e-4); });
+      }
+      expect(quantStats.optimization!.optimal).toEqual(quantStats.alternatives[objective]);
+      expect(quantStats.portfolioRisk!.maxDrawdown).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('min variance has the lowest volatility and max Sharpe the highest Sharpe', async () => {
+    const { quantStats } = await optimizePreparedAnalysis(prepareAnalysis(base)!, 0.02, {}, base.maxWeights, 'maxSharpe');
+    const alts = Object.values(quantStats.alternatives);
+    expect(quantStats.alternatives.minVariance!.volatility).toBeLessThanOrEqual(Math.min(...alts.map(a => a!.volatility)) + 1e-6);
+    expect(quantStats.alternatives.maxSharpe!.sharpeRatio).toBeGreaterThanOrEqual(Math.max(...alts.map(a => a!.sharpeRatio)) - 1e-3);
   });
 });
 

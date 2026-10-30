@@ -3,6 +3,7 @@ import { calculateBlackLitterman, simulateBlackSwan } from '../advancedQuant';
 import { optimizePortfolio } from '../optimization';
 import { FRONTIER_CHART_SAMPLES, TRADING_DAYS } from '../constants';
 import { resolveBounds } from './portfolioAnalysis';
+import { marketCapWeights } from './objectives';
 import type { BlackLittermanStats, InvestorView, PriceRow, QuantStats, WeightBounds } from '../types';
 
 /**
@@ -28,14 +29,20 @@ export interface BlackLittermanInput {
   riskFreeRate: number;
   minWeights: WeightBounds;
   maxWeights: WeightBounds;
+  /** Market cap (or fund assets) per asset, aligned with quantStats.matrixSymbols */
+  marketCaps?: (number | null)[];
 }
 
-/** Black-Litterman posterior (equal-weight prior, Idzorek confidences), its Max-Sharpe portfolio and a fat-tail stress test. */
+/**
+ * Black-Litterman posterior (cap-weighted prior, equal weights if any cap is missing; Idzorek confidences),
+ * its Max-Sharpe portfolio and a fat-tail stress test.
+ */
 export async function runBlackLittermanAnalysis(input: BlackLittermanInput): Promise<BlackLittermanStats> {
-  const { quantStats, views, historicalData, benchmark, riskFreeRate, minWeights, maxWeights } = input;
+  const { quantStats, views, historicalData, benchmark, riskFreeRate, minWeights, maxWeights, marketCaps } = input;
   const symbols = quantStats.matrixSymbols;
   const n = symbols.length;
-  const marketWeights = Array(n).fill(1 / n);
+  const capWeights = marketCaps ? marketCapWeights(marketCaps) : null;
+  const marketWeights = capWeights ?? Array(n).fill(1 / n);
   const delta = impliedRiskAversion(historicalData, benchmark, quantStats.benchAnnReturn, riskFreeRate);
 
   const viewsArr = symbols.map(sym => views[sym]?.view ?? 0);
@@ -49,5 +56,5 @@ export async function runBlackLittermanAnalysis(input: BlackLittermanInput): Pro
   const portDailyVol = optimization.optimal.volatility / Math.sqrt(TRADING_DAYS);
   const stress = simulateBlackSwan(portDailyVol, 1000, 3);
 
-  return { pi, blReturns, blCovariance, optimization, stress };
+  return { priorSource: capWeights ? 'marketCap' : 'equal', pi, blReturns, blCovariance, optimization, stress };
 }

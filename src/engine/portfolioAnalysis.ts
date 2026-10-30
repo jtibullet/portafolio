@@ -1,5 +1,5 @@
 /**
- * Portfolio analysis pipeline: statistics, risk matrices, expected returns and Max-Sharpe optimization.
+ * Portfolio analysis pipeline: statistics, risk matrices, expected returns and portfolio construction.
  * Pure functions with no React dependencies, so they can be unit-tested and moved to a worker later.
  */
 import {
@@ -7,9 +7,12 @@ import {
   calculateJensensAlpha, calculateARIMA111, calculateAlphaSignal, calculateBlackLittermanPosterior,
   type ARIMA_Forecast, type AlphaSignalResult,
 } from '../utils/quantMath';
-import { ConstraintError, optimizePortfolio } from '../optimization';
+import { ConstraintError, minimumVariance, portfolioStats, roundWeights, solvePortfolio, type Objective, type OptimizationResult } from '../optimization';
+import { ledoitWolfCovariance } from './covariance';
+import { hrpWeights, projectToBounds, riskParityWeights } from './objectives';
+import { riskMetrics } from './riskMetrics';
 import { DEFAULT_MAX_WEIGHT, defaultMinWeight, FRONTIER_CHART_SAMPLES, TRADING_DAYS } from '../constants';
-import type { AssetStat, OptimizationFailure, PriceRow, QuantStats, WeightBounds } from '../types';
+import type { AssetStat, CovarianceMethod, OptimizationFailure, PriceRow, QuantStats, WeightBounds } from '../types';
 
 export type SeriesBySymbol = Record<string, (number | null)[]>;
 
@@ -41,8 +44,9 @@ export function computeAssetStats(
     const capmReturn = calculateCAPM(riskFreeRate, beta, benchAnnReturn);
     const alpha = calculateJensensAlpha(annReturn, capmReturn);
     const sharpeRatio = annVolatility === 0 ? 0 : (annReturn - riskFreeRate) / annVolatility;
+    const { sortino, maxDrawdown, recoveryDays } = riskMetrics(r, riskFreeRate);
 
-    assetStats.push({ symbol: sym, annReturn, annVolatility, beta, capmExpectedReturn: capmReturn, alpha, sharpeRatio });
+    assetStats.push({ symbol: sym, annReturn, annVolatility, beta, capmExpectedReturn: capmReturn, alpha, sharpeRatio, sortino, maxDrawdown, recoveryDays });
   }
   return assetStats;
 }
@@ -152,11 +156,13 @@ export interface AnalysisInput {
   useArimaForecast: boolean;
   minWeights: WeightBounds;
   maxWeights: WeightBounds;
+  objective: Objective;
+  covarianceMethod: CovarianceMethod;
 }
 
 /** Synchronous part of the analysis: everything except the optimizer. Null if the benchmark has no data. */
 export function prepareAnalysis(input: AnalysisInput) {
-  const { historicalData, symbols, selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast } = input;
+  const { historicalData, symbols, selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, covarianceMethod } = input;
   const { pricesBySymbol, returnsBySymbol } = buildSeries(historicalData, symbols);
 
   const benchReturns = returnsBySymbol[selectedBenchmark];
@@ -165,7 +171,11 @@ export function prepareAnalysis(input: AnalysisInput) {
   const benchAnnReturn = mean(benchReturns) * TRADING_DAYS;
   const assetStats = computeAssetStats(selectedTickers, returnsBySymbol, benchReturns, benchAnnReturn, riskFreeRate);
   const matrixSymbols = selectedTickers.filter(sym => returnsBySymbol[sym]);
-  const { covMatrix, corMatrix } = computeRiskMatrices(matrixSymbols, returnsBySymbol);
+  const sample = computeRiskMatrices(matrixSymbols, returnsBySymbol);
+  const corMatrix = sample.corMatrix;
+  // The optimizer uses the shrunk covariance when chosen; the heatmap always shows sample correlations
+  const shrunk = covarianceMethod === 'ledoitWolf' ? ledoitWolfCovariance(matrixSymbols.map(sym => returnsBySymbol[sym])) : null;
+  const covMatrix = shrunk ? shrunk.cov.map(row => row.map(v => v * TRADING_DAYS)) : sample.covMatrix;
 
   let expectedReturns = assetStats.map(s => s.annReturn);
   let arimaForecasts: Record<string, ARIMA_Forecast> = {};
@@ -181,6 +191,8 @@ export function prepareAnalysis(input: AnalysisInput) {
     matrixSymbols,
     covMatrix,
     corMatrix,
+    covarianceMethod: (shrunk ? 'ledoitWolf' : 'sample') as CovarianceMethod,
+    covarianceShrinkage: shrunk ? shrunk.shrinkage : null,
     expectedReturns,
     arimaForecasts,
     alphaSignals: computeAlphaSignals(matrixSymbols, pricesBySymbol),
@@ -190,30 +202,62 @@ export function prepareAnalysis(input: AnalysisInput) {
 
 export type PreparedAnalysis = NonNullable<ReturnType<typeof prepareAnalysis>>;
 
-/** Runs the Max-Sharpe optimizer and the portfolio-level CAPM metrics. */
+function describe(weights: number[], mu: number[], cov: number[][], riskFreeRate: number, method: Objective): OptimizationResult {
+  const rounded = roundWeights(weights);
+  const stats = portfolioStats(rounded, mu, cov);
+  return { weights: rounded, ...stats, sharpeRatio: stats.volatility > 0 ? (stats.expectedReturn - riskFreeRate) / stats.volatility : 0, method };
+}
+
+/**
+ * The portfolio each objective produces within the weight bounds. Max Sharpe and minimum variance
+ * are exact QPs; risk parity and HRP ignore expected returns and are moved into the bounds afterwards.
+ */
+export function objectivePortfolios(
+  expectedReturns: number[],
+  cov: number[][],
+  riskFreeRate: number,
+  lb: number[],
+  ub: number[],
+  maxSharpe: OptimizationResult,
+): Record<Objective, OptimizationResult> {
+  return {
+    maxSharpe,
+    minVariance: describe(minimumVariance(cov, lb, ub), expectedReturns, cov, riskFreeRate, 'minVariance'),
+    riskParity: describe(projectToBounds(riskParityWeights(cov), lb, ub), expectedReturns, cov, riskFreeRate, 'riskParity'),
+    hrp: describe(projectToBounds(hrpWeights(cov), lb, ub), expectedReturns, cov, riskFreeRate, 'hrp'),
+  };
+}
+
+/** Builds the portfolio for the chosen objective (plus the alternatives) and its CAPM and risk metrics. */
 export async function optimizePreparedAnalysis(
   prepared: PreparedAnalysis,
   riskFreeRate: number,
   minWeights: WeightBounds,
   maxWeights: WeightBounds,
+  objective: Objective = 'maxSharpe',
 ): Promise<{ quantStats: QuantStats; optimizationError: OptimizationFailure | null }> {
   const { assetStats, matrixSymbols, covMatrix, corMatrix, expectedReturns, returnsBySymbol, benchAnnReturn } = prepared;
   let optimization = null;
+  let alternatives: Partial<Record<Objective, OptimizationResult>> = {};
   let portBeta = 0;
   let portCAPM = 0;
   let portAlpha = 0;
   let portDailyReturns: (number | null)[] = [];
+  let portfolioRisk = null;
   let optimizationError: OptimizationFailure | null = null;
 
   try {
     const { minWeightsArr, maxWeightsArr } = resolveBounds(matrixSymbols, minWeights, maxWeights);
-    optimization = await optimizePortfolio(expectedReturns, covMatrix, riskFreeRate, FRONTIER_CHART_SAMPLES, undefined, maxWeightsArr, minWeightsArr);
+    const sharpe = solvePortfolio(expectedReturns, covMatrix, riskFreeRate, maxWeightsArr, minWeightsArr, FRONTIER_CHART_SAMPLES);
+    alternatives = objectivePortfolios(expectedReturns, covMatrix, riskFreeRate, minWeightsArr, maxWeightsArr, sharpe.optimal);
+    optimization = { ...sharpe, optimal: alternatives[objective]! };
 
     const weights = optimization.optimal.weights;
     portBeta = assetStats.reduce((sum, stat, i) => sum + stat.beta * weights[i], 0);
     portCAPM = calculateCAPM(riskFreeRate, portBeta, benchAnnReturn);
     portAlpha = calculateJensensAlpha(optimization.optimal.expectedReturn, portCAPM);
     portDailyReturns = portfolioDailyReturns(matrixSymbols, returnsBySymbol, weights);
+    portfolioRisk = riskMetrics(portDailyReturns, riskFreeRate);
   } catch (e) {
     console.log("Could not optimize portfolio", e);
     if (e instanceof ConstraintError) {
@@ -232,6 +276,11 @@ export async function optimizePreparedAnalysis(
       covarianceMatrix: covMatrix,
       correlationMatrix: corMatrix,
       optimization,
+      objective,
+      alternatives,
+      covarianceMethod: prepared.covarianceMethod,
+      covarianceShrinkage: prepared.covarianceShrinkage,
+      portfolioRisk,
       portBeta,
       portCAPM,
       portAlpha,

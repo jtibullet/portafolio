@@ -7,7 +7,7 @@ import type { ARIMA_Forecast, AlphaSignalResult } from '../utils/quantMath';
 import type { MarketDataState } from './useMarketData';
 import { useI18n } from '../i18n';
 import type {
-  BlackLittermanStats, InvestorView, OptimizationFailure, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
+  AssetMetadata, BlackLittermanStats, InvestorView, OptimizationFailure, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
 } from '../types';
 
 /** Wait this long after the last slider/input change before recomputing */
@@ -24,10 +24,10 @@ export function usePortfolioAnalysis(marketData: MarketDataState | null, params:
   const [optimizationError, setOptimizationError] = useState<OptimizationFailure | null>(null);
   const [arimaForecasts, setArimaForecasts] = useState<Record<string, ARIMA_Forecast>>({});
   const [alphaSignals, setAlphaSignals] = useState<Record<string, AlphaSignalResult>>({});
-  const { selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights } = params;
+  const { selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod } = params;
   const inputs = useDebouncedValue(
-    useMemo(() => ({ selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights }),
-      [selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights]),
+    useMemo(() => ({ selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod }),
+      [selectedTickers, selectedBenchmark, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod]),
     INPUT_DEBOUNCE_MS,
   );
 
@@ -91,20 +91,26 @@ export function useBlackLitterman(
   views: Record<string, InvestorView>,
   marketData: MarketDataState | null,
   params: PortfolioParams,
+  metadata: AssetMetadata[] | null,
 ) {
   const [blStats, setBlStats] = useState<BlackLittermanStats | null>(null);
   const { selectedBenchmark, riskFreeRate, minWeights, maxWeights } = params;
   const historicalData = marketData?.historicalData || null;
   const debouncedViews = useDebouncedValue(views, INPUT_DEBOUNCE_MS);
+  // Market capitalization (fund assets for ETFs) of each asset, for the implied prior
+  const marketCaps = useMemo(
+    () => quantStats?.matrixSymbols.map(sym => { const m = metadata?.find(x => x.symbol === sym); return m?.marketCap || m?.totalAssets || null; }) ?? [],
+    [quantStats, metadata],
+  );
 
   useEffect(() => {
     if (!quantStats || Object.keys(debouncedViews).length === 0 || !historicalData) return;
     let cancelled = false;
-    runJob('blackLitterman', { quantStats, views: debouncedViews, historicalData, benchmark: selectedBenchmark, riskFreeRate, minWeights, maxWeights })
+    runJob('blackLitterman', { quantStats, views: debouncedViews, historicalData, benchmark: selectedBenchmark, riskFreeRate, minWeights, maxWeights, marketCaps })
       .then(result => { if (!cancelled) setBlStats(result); })
       .catch(err => console.log("BL Error", err));
     return () => { cancelled = true; };
-  }, [quantStats, debouncedViews, riskFreeRate, historicalData, selectedBenchmark, maxWeights, minWeights]);
+  }, [quantStats, debouncedViews, riskFreeRate, historicalData, selectedBenchmark, maxWeights, minWeights, marketCaps]);
 
   return blStats;
 }

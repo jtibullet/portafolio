@@ -20,11 +20,14 @@ export interface OptimizationResult {
   volatility: number;
   sharpeRatio: number;
   /**
-   * 'maxSharpe' normally. 'minVariance' when no allowed portfolio beats the risk-free rate,
-   * so the Sharpe ratio has no meaningful maximum and the least risky portfolio is returned.
+   * The rule that produced the weights. A max-Sharpe request reports 'minVariance' when no allowed
+   * portfolio beats the risk-free rate, so the Sharpe ratio has no meaningful maximum.
    */
-  method: 'maxSharpe' | 'minVariance';
+  method: Objective;
 }
+
+/** Portfolio construction rule chosen by the user. */
+export type Objective = 'maxSharpe' | 'minVariance' | 'riskParity' | 'hrp';
 
 export interface FrontierPoint {
   volatility: number;
@@ -54,7 +57,7 @@ export interface PortfolioOptimization {
 const FRONTIER_POINTS = 40;
 const DEFAULT_MIN_WEIGHT = 0.05;
 
-function portfolioStats(weights: number[], mu: number[], cov: number[][]) {
+export function portfolioStats(weights: number[], mu: number[], cov: number[][]) {
   let ret = 0;
   let variance = 0;
   for (let i = 0; i < weights.length; i++) {
@@ -191,7 +194,7 @@ function samplePortfolios(mu: number[], cov: number[][], riskFreeRate: number, l
 }
 
 /** Weights rounded to 4 decimals; the rounding residue goes to the largest weight so they still sum to 1. */
-function roundWeights(weights: number[]) {
+export function roundWeights(weights: number[]) {
   const rounded = weights.map(w => Math.round(Math.max(w, 0) * 10000) / 10000);
   const diff = 1 - rounded.reduce((a, b) => a + b, 0);
   const maxIdx = rounded.indexOf(Math.max(...rounded));
