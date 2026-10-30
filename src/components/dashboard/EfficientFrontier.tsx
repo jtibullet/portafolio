@@ -1,155 +1,96 @@
-import React from 'react';
-import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Cell
-} from 'recharts';
+import { Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell } from 'recharts';
 import { interpolatePlasma } from 'd3-scale-chromatic';
-import { OptimizationResult, FrontierPoint } from '../../optimization';
+import { useI18n } from '../../i18n';
+import { DARK_CHART } from '../../lib/chartTheme';
+import { SectionTitle } from '../ui/SectionTitle';
+import type { PortfolioOptimization } from '../../optimization';
+import type { AssetStat } from '../../types';
 
-export interface EfficientFrontierProps {
-  optimization: {
-    optimal: OptimizationResult;
-    frontier: FrontierPoint[];
-    simulated?: any[];
-  };
-  assetStats: any[];
+const axisLabel = { fontSize: 10, fontFamily: 'monospace', fill: DARK_CHART.tick };
+const axisTick = { fill: DARK_CHART.tick, fontSize: 10 };
+
+/** Simulated portfolios colored by Sharpe ratio, the efficient frontier, each asset and the optimal portfolio. */
+export function EfficientFrontier({ optimization, assetStats, matrixSymbols }: {
+  optimization: PortfolioOptimization;
+  assetStats: AssetStat[];
   matrixSymbols: string[];
-}
-
-export const EfficientFrontier: React.FC<EfficientFrontierProps> = ({
-  optimization,
-  assetStats,
-  matrixSymbols
-}) => {
+}) {
+  const { t, f } = useI18n();
   const simulated = optimization.simulated || [];
-  const maxSharpe = Math.max(
-    ...simulated.map((p: any) => p.sharpeRatio),
-    optimization.optimal.sharpeRatio,
-    0
-  );
-  const minSharpe = Math.min(
-    ...simulated.map((p: any) => p.sharpeRatio),
-    0
-  );
+  const maxSharpe = Math.max(...simulated.map(p => p.sharpeRatio), optimization.optimal.sharpeRatio, 0);
+  const minSharpe = Math.min(...simulated.map(p => p.sharpeRatio), 0);
   const sharpeRange = maxSharpe - minSharpe + 0.0001;
+  const optimalName = t('frontier.optimal');
 
   return (
-    <div className="flex flex-col h-full bg-white border border-[#141414]">
+    <div className="flex flex-col h-full bg-white border border-ink">
       <div className="flex justify-between items-end mb-2">
-        <h3 className="text-xs font-mono uppercase bg-[#141414] text-[#E4E3E0] px-2 py-0.5">
-          Efficient Frontier
-        </h3>
+        <SectionTitle>{t('frontier.title')}</SectionTitle>
       </div>
-      <div className="flex-1 bg-[#111111] border border-[#141414] p-4 min-h-[300px]">
+      <div className={`flex-1 ${DARK_CHART.background} border border-ink p-2 sm:p-4 min-h-[300px]`}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+          <ComposedChart margin={{ top: 20, right: 10, bottom: 20, left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={DARK_CHART.grid} vertical={false} />
             <XAxis
               allowDuplicatedCategory={false}
               dataKey="volatility"
               type="number"
               domain={['auto', 'auto']}
-              tickFormatter={(val) => `${(val * 100).toFixed(1)}%`}
-              label={{
-                value: 'Annualized Volatility (Risk)',
-                position: 'insideBottom',
-                offset: -10,
-                fontSize: 10,
-                fontFamily: 'monospace',
-                fill: '#888'
-              }}
-              stroke="#444"
-              tick={{ fill: '#888', fontSize: 10 }}
+              tickFormatter={(val) => f.pct(val, 1)}
+              label={{ value: t('frontier.xLabel'), position: 'insideBottom', offset: -10, ...axisLabel }}
+              stroke={DARK_CHART.axis}
+              tick={axisTick}
             />
             <YAxis
               dataKey="expectedReturn"
               type="number"
               domain={['auto', 'auto']}
-              tickFormatter={(val) => `${(val * 100).toFixed(1)}%`}
-              label={{
-                value: 'Expected Return',
-                angle: -90,
-                position: 'insideLeft',
-                fontSize: 10,
-                fontFamily: 'monospace',
-                fill: '#888'
-              }}
-              stroke="#444"
-              tick={{ fill: '#888', fontSize: 10 }}
+              tickFormatter={(val) => f.pct(val, 1)}
+              label={{ value: t('frontier.yLabel'), angle: -90, position: 'insideLeft', ...axisLabel }}
+              stroke={DARK_CHART.axis}
+              tick={axisTick}
+              width={48}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#111',
-                borderColor: '#333',
-                color: '#eee',
-                fontSize: '10px',
-                fontFamily: 'monospace'
-              }}
+              contentStyle={DARK_CHART.tooltip}
               formatter={(value: number, name: string, props: any) => {
-                if (name === 'Expected Return') return [`${(value * 100).toFixed(2)}%`, name];
-                if (name === 'Optimal Portfolio' && props.payload.weights) {
-                  const w = props.payload.weights;
-                  const wStr = matrixSymbols
-                    .map((s: string, i: number) => `${s}: ${(w[i] * 100).toFixed(1)}%`)
-                    .join(', ');
-                  return [`${(value * 100).toFixed(2)}%`, `Return | ${wStr}`];
+                if (name === optimalName && props.payload.weights) {
+                  const w: number[] = props.payload.weights;
+                  const weights = matrixSymbols.map((s, i) => `${s}: ${f.pct(w[i], 1)}`).join(', ');
+                  return [f.pct(value), `${t('frontier.return')} | ${weights}`];
                 }
-                return [`${(value * 100).toFixed(2)}%`, name];
+                return [f.pct(value), name];
               }}
-              labelFormatter={(label) => `Vol: ${(Number(label) * 100).toFixed(2)}%`}
+              labelFormatter={(label) => t('frontier.vol', { value: f.pct(Number(label)) })}
             />
 
-            <Scatter name="Simulated Portfolios" data={simulated}>
-              {simulated.map((entry: any, index: number) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={interpolatePlasma((entry.sharpeRatio - minSharpe) / sharpeRange)}
-                />
+            <Scatter name={t('frontier.simulated')} data={simulated} isAnimationActive={false}>
+              {simulated.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={interpolatePlasma((entry.sharpeRatio - minSharpe) / sharpeRange)} />
               ))}
             </Scatter>
-            <Line
-              data={optimization.frontier}
-              type="basis"
-              dataKey="expectedReturn"
-              stroke="#fff"
-              strokeWidth={2}
-              dot={false}
-              name="Efficient Frontier"
-            />
+            <Line data={optimization.frontier} type="basis" dataKey="expectedReturn" stroke="#fff" strokeWidth={2} dot={false} name={t('frontier.curve')} isAnimationActive={false} />
             <Scatter
-              name="Assets"
-              data={assetStats.map((s: any) => ({
-                volatility: s.annVolatility,
-                expectedReturn: s.annReturn,
-                name: s.symbol
-              }))}
+              name={t('frontier.assets')}
+              data={assetStats.map(s => ({ volatility: s.annVolatility, expectedReturn: s.annReturn, name: s.symbol }))}
               fill="#9ca3af"
+              isAnimationActive={false}
             />
-
             <Scatter
-              name="Optimal Portfolio"
-              data={[
-                {
-                  volatility: optimization.optimal.volatility,
-                  expectedReturn: optimization.optimal.expectedReturn,
-                  name: 'Max Sharpe',
-                  weights: optimization.optimal.weights
-                }
-              ]}
+              name={optimalName}
+              data={[{
+                volatility: optimization.optimal.volatility,
+                expectedReturn: optimization.optimal.expectedReturn,
+                name: 'Max Sharpe',
+                weights: optimization.optimal.weights
+              }]}
               fill="#fbbf24"
               shape="star"
+              isAnimationActive={false}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
   );
-};
+}

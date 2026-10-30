@@ -1,4 +1,3 @@
-import { useCollapsible } from '../../hooks/useUiState';
 import { AnalystTargets } from './AnalystTargets';
 import { AlphaExecution } from './AlphaExecution';
 import { SentimentPanel } from './SentimentPanel';
@@ -19,19 +18,13 @@ export function AiTab(props: {
   recommendations: Recommendations | null;
   recommendationsLoading: boolean;
 }) {
-  const [recommendationsOpen, toggleRecommendations] = useCollapsible('recommendations');
   return (
     <>
       <AnalystTargets metadata={props.metadata} loading={props.metadataLoading} />
       <AlphaExecution alphaSignals={props.alphaSignals} historicalData={props.historicalData} />
       <SentimentPanel sentimentData={props.sentimentData} loading={props.sentimentLoading} />
       <ArimaPanel enabled={props.useArimaForecast} forecasts={props.arimaForecasts} />
-      <AssetRecommendations
-        recommendations={props.recommendations}
-        isRecommendationsExpanded={recommendationsOpen}
-        setIsRecommendationsExpanded={toggleRecommendations}
-        isRecommendationsLoading={props.recommendationsLoading}
-      />
+      <AssetRecommendations recommendations={props.recommendations} loading={props.recommendationsLoading} />
     </>
   );
 }

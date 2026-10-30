@@ -45,9 +45,8 @@ export function computeSectorWeights(symbols: string[], weights: number[], metad
     .sort((a, b) => b.weight - a.weight);
 }
 
-/** Equal-width histogram of already sorted values. */
+/** Equal-width histogram of already sorted values; `name` is the bin midpoint. */
 export function buildHistogram(sortedValues: number[], numBins = 40) {
-  const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
   const min = sortedValues[0];
   const max = sortedValues[sortedValues.length - 1];
   let binWidth = (max - min) / numBins;
@@ -56,7 +55,8 @@ export function buildHistogram(sortedValues: number[], numBins = 40) {
   const bins = Array.from({ length: numBins }, (_, i) => ({
     name: min + (i + 0.5) * binWidth,
     count: 0,
-    rangeLabel: `${compact.format(min + i * binWidth)} - ${compact.format(min + (i + 1) * binWidth)}`
+    from: min + i * binWidth,
+    to: min + (i + 1) * binWidth,
   }));
 
   for (const val of sortedValues) {

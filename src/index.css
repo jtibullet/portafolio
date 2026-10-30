@@ -1,1 +1,74 @@
 @import "tailwindcss";
+
+/* `dark:` utilities follow the .dark class on <html> (set from the theme toggle), not the OS setting */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Main text, borders and the black title bars */
+  --color-ink: #141414;
+  /* Page background and the text drawn on ink */
+  --color-paper: #E4E3E0;
+  /* Table headers and input backgrounds */
+  --color-panel: #f9f9f9;
+}
+
+/*
+ * Dark theme: instead of adding dark: variants to every element, the palette itself is swapped.
+ * Neutral surfaces invert, pale status tints become dark tints and status text gets lighter.
+ */
+.dark {
+  color-scheme: dark;
+  --color-ink: #e4e4e7;
+  --color-paper: #0e0e10;
+  --color-panel: #1c1c20;
+  --color-white: #161619;
+
+  --color-zinc-50: #1a1a1e;
+  --color-zinc-100: #212126;
+  --color-zinc-200: #2c2c32;
+  --color-zinc-300: #3c3c44;
+  --color-zinc-400: #8a8a94;
+  --color-zinc-500: #a1a1aa;
+  --color-zinc-600: #b9b9c1;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-800: #d4d4d8;
+  --color-zinc-900: #f4f4f5;
+
+  --color-green-50: #0f2418;
+  --color-green-100: #12301f;
+  --color-green-200: #1c4a2f;
+  --color-green-300: #276b43;
+  --color-green-600: #4ade80;
+  --color-green-700: #86efac;
+  --color-red-50: #2a1214;
+  --color-red-100: #3a1519;
+  --color-red-200: #5c1f25;
+  --color-red-300: #7f2a32;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+  --color-blue-50: #111c30;
+  --color-blue-100: #16264a;
+  --color-blue-200: #1e3a6b;
+  --color-blue-600: #60a5fa;
+  --color-blue-800: #93c5fd;
+  --color-orange-200: #5a2e12;
+  --color-orange-600: #fb923c;
+  --color-yellow-50: #2a230c;
+  --color-yellow-200: #5a4a12;
+  --color-yellow-800: #fde68a;
+}
+
+/* Recharts draws axis text, grid lines and tooltips with fixed light-theme colors */
+.dark .recharts-cartesian-axis-tick-value {
+  fill: var(--color-zinc-500);
+}
+.dark .recharts-cartesian-grid line {
+  stroke: var(--color-zinc-200);
+}
+.dark .recharts-default-tooltip {
+  background-color: var(--color-white) !important;
+  border-color: var(--color-zinc-300) !important;
+}
+.dark .recharts-legend-item-text {
+  color: var(--color-zinc-600) !important;
+}

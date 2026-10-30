@@ -25,6 +25,20 @@ export interface FrontierPoint {
   expectedReturn: number;
 }
 
+/** Weight bounds that no fully invested portfolio can satisfy. `assetIndex` is set for 'minAboveMax'. */
+export type ConstraintCode = 'minSum' | 'maxSum' | 'minAboveMax';
+
+export class ConstraintError extends Error {
+  constructor(
+    message: string,
+    public readonly code: ConstraintCode,
+    public readonly details: { sum?: number; assetIndex?: number; min?: number; max?: number },
+  ) {
+    super(message);
+    this.name = 'ConstraintError';
+  }
+}
+
 export interface PortfolioOptimization {
   optimal: OptimizationResult;
   frontier: FrontierPoint[];
@@ -52,19 +66,19 @@ export async function optimizePortfolio(
   const remainingWeight = 1 - sumMinWeights;
   
   if (remainingWeight < 0) {
-    throw new Error(`Minimum weight constraints (sum = ${(sumMinWeights*100).toFixed(1)}%) exceed 100%.`);
+    throw new ConstraintError(`Minimum weight constraints (sum = ${(sumMinWeights*100).toFixed(1)}%) exceed 100%.`, 'minSum', { sum: sumMinWeights });
   }
 
   const maxW = maxWeights || new Array(n).fill(1);
   let sumMaxWeights = 0;
   for (let j = 0; j < n; j++) {
     if (minW[j] > maxW[j]) {
-      throw new Error(`Minimum weight (${(minW[j]*100).toFixed(1)}%) exceeds maximum weight (${(maxW[j]*100).toFixed(1)}%) for asset ${j + 1}.`);
+      throw new ConstraintError(`Minimum weight (${(minW[j]*100).toFixed(1)}%) exceeds maximum weight (${(maxW[j]*100).toFixed(1)}%) for asset ${j + 1}.`, 'minAboveMax', { assetIndex: j, min: minW[j], max: maxW[j] });
     }
     sumMaxWeights += maxW[j];
   }
   if (sumMaxWeights < 1 - 1e-9) {
-    throw new Error(`Maximum weight constraints (sum = ${(sumMaxWeights*100).toFixed(1)}%) are below 100%; the portfolio cannot be fully invested.`);
+    throw new ConstraintError(`Maximum weight constraints (sum = ${(sumMaxWeights*100).toFixed(1)}%) are below 100%; the portfolio cannot be fully invested.`, 'maxSum', { sum: sumMaxWeights });
   }
 
   let maxSharpe = -Infinity;

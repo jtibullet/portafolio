@@ -1,41 +1,43 @@
 import { Loader2 } from 'lucide-react';
 import { Bar, BarChart, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useI18n } from '../../i18n';
 import { buildHistogram } from '../../engine/chartData';
+import { CHART } from '../../lib/chartTheme';
 import { SectionHeader } from '../ui/SectionTitle';
 import { TRADING_DAYS } from '../../constants';
 import type { MonteCarloResult } from '../../monteCarlo';
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 0 });
 const axisTick = { fontSize: 10, fontFamily: 'monospace' };
-const cardClass = "bg-white border border-[#141414] p-6 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg";
+const cardClass = "bg-white border border-ink p-4 sm:p-6 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg";
 
 function SummaryCards({ result }: { result: MonteCarloResult }) {
+  const { t, f } = useI18n();
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
       <div className={cardClass}>
-        <span className="text-[10px] font-mono uppercase text-zinc-500 mb-2">Bear Market (5th Pct)</span>
-        <span className="text-2xl font-serif text-red-600">{usd.format(result.percentiles.p5)}</span>
+        <span className="text-[10px] font-mono uppercase text-zinc-500 mb-2">{t('mc.bear')}</span>
+        <span className="text-2xl font-serif text-red-600">{f.money(result.percentiles.p5, 'USD', 0)}</span>
       </div>
-      <div className={`${cardClass} bg-blue-50/30`}>
-        <span className="text-[10px] font-mono uppercase text-zinc-500 mb-2">Median Expected (50th Pct)</span>
-        <span className="text-3xl font-serif text-[#141414]">{usd.format(result.percentiles.p50)}</span>
+      <div className={`${cardClass} bg-blue-50`}>
+        <span className="text-[10px] font-mono uppercase text-zinc-500 mb-2">{t('mc.median')}</span>
+        <span className="text-3xl font-serif text-ink">{f.money(result.percentiles.p50, 'USD', 0)}</span>
       </div>
       <div className={cardClass}>
-        <span className="text-[10px] font-mono uppercase text-zinc-500 mb-2">Bull Market (95th Pct)</span>
-        <span className="text-2xl font-serif text-green-600">{usd.format(result.percentiles.p95)}</span>
+        <span className="text-[10px] font-mono uppercase text-zinc-500 mb-2">{t('mc.bull')}</span>
+        <span className="text-2xl font-serif text-green-600">{f.money(result.percentiles.p95, 'USD', 0)}</span>
       </div>
     </div>
   );
 }
 
 function FanChart({ result, years }: { result: MonteCarloResult; years: number }) {
+  const { t, f } = useI18n();
   return (
     <div className="flex flex-col">
-      <SectionHeader title="Cone of Uncertainty">
-        <span className="text-[10px] text-zinc-500 font-mono">Random 100 Paths</span>
+      <SectionHeader title={t('mc.cone')}>
+        <span className="text-[10px] text-zinc-500 font-mono">{t('mc.paths')}</span>
       </SectionHeader>
-      <div className="flex-1 bg-white border border-[#141414] p-4 min-h-[300px]">
+      <div className="flex-1 bg-white border border-ink p-2 sm:p-4 min-h-[300px]">
         <ResponsiveContainer width="100%" height={300}>
           <ComposedChart>
             <XAxis
@@ -43,20 +45,20 @@ function FanChart({ result, years }: { result: MonteCarloResult; years: number }
               type="number"
               dataKey="step"
               domain={[0, years * TRADING_DAYS]}
-              tickFormatter={(val) => `Y${(val / TRADING_DAYS).toFixed(1)}`}
+              tickFormatter={(val) => t('mc.yearTick', { n: f.num(val / TRADING_DAYS, 1) })}
               tick={axisTick}
               axisLine={false}
               tickLine={false}
             />
-            <YAxis domain={['auto', 'auto']} tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} tick={axisTick} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(val: number) => usd.format(val)} labelFormatter={(label: number) => `Day ${label}`} />
+            <YAxis domain={['auto', 'auto']} tickFormatter={(val) => f.compact(val)} tick={axisTick} axisLine={false} tickLine={false} width={44} />
+            <Tooltip formatter={(val: number) => f.money(val, 'USD', 0)} labelFormatter={(label: number) => t('mc.day', { n: label })} />
             {result.paths.map((path, idx) => (
               <Line
                 key={idx}
                 data={path.map((value, step) => ({ step, value }))}
                 type="monotone"
                 dataKey="value"
-                stroke="rgba(37, 99, 235, 0.05)"
+                stroke="rgba(59, 130, 246, 0.08)"
                 strokeWidth={1}
                 dot={false}
                 activeDot={false}
@@ -71,19 +73,27 @@ function FanChart({ result, years }: { result: MonteCarloResult; years: number }
 }
 
 function FinalValueHistogram({ result }: { result: MonteCarloResult }) {
-  const bins = buildHistogram(result.finalValues);
+  const { t, f } = useI18n();
+  const bins = buildHistogram(result.finalValues).map(b => ({
+    ...b,
+    rangeLabel: `${f.compact(b.from, 1)} – ${f.compact(b.to, 1)}`,
+  }));
   return (
     <div className="flex flex-col">
-      <SectionHeader title="Final Value Distribution">
-        <span className="text-[10px] text-zinc-500 font-mono">10,000 Simulations</span>
+      <SectionHeader title={t('mc.dist')}>
+        <span className="text-[10px] text-zinc-500 font-mono">{t('mc.sims')}</span>
       </SectionHeader>
-      <div className="flex-1 bg-white border border-[#141414] p-4 min-h-[300px]">
+      <div className="flex-1 bg-white border border-ink p-2 sm:p-4 min-h-[300px]">
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={bins}>
-            <XAxis allowDuplicatedCategory={false} dataKey="name" tickFormatter={(val) => compact.format(val)} tick={axisTick} axisLine={false} tickLine={false} />
+            <XAxis allowDuplicatedCategory={false} dataKey="name" tickFormatter={(val) => f.compact(val)} tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis hide />
-            <Tooltip formatter={(val: number) => [val, 'Count']} labelFormatter={(_, payload) => payload[0]?.payload.rangeLabel || ''} />
-            <Bar dataKey="count" fill="#3b82f6" opacity={0.8} />
+            <Tooltip
+              formatter={(val: number) => [val, t('mc.count')]}
+              labelFormatter={(_, payload) => payload[0]?.payload.rangeLabel || ''}
+              cursor={{ fill: CHART.cursor }}
+            />
+            <Bar dataKey="count" fill={CHART.accent} opacity={0.8} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -98,29 +108,31 @@ export function MonteCarloPanel({ result, years, setYears, initialAmount, setIni
   initialAmount: number;
   setInitialAmount: (amount: number) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col sm:flex-row gap-6 p-6 bg-white border border-[#141414]">
+    <div className="flex flex-col gap-6 sm:gap-8">
+      <div className="flex flex-col sm:flex-row gap-6 p-4 sm:p-6 bg-white border border-ink">
         <div className="flex-1">
-          <label className="block text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Initial Investment Amount</label>
+          <label className="block text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2">{t('mc.initial')}</label>
           <input
             type="number"
+            inputMode="decimal"
             value={initialAmount}
             onChange={(e) => setInitialAmount(Number(e.target.value))}
-            className="w-full bg-[#f9f9f9] border border-zinc-300 p-2 text-sm font-mono focus:outline-none focus:border-[#141414]"
+            className="w-full bg-panel border border-zinc-300 p-2 text-sm font-mono focus:outline-none focus:border-ink"
           />
         </div>
         <div className="flex-1">
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Years to Forecast</label>
-            <span className="text-sm font-mono">{years} Years</span>
+            <label className="block text-[10px] uppercase tracking-wider text-zinc-500 font-bold">{t('mc.years')}</label>
+            <span className="text-sm font-mono">{t('mc.yearsValue', { n: years })}</span>
           </div>
           <input
             type="range"
             min="1" max="10" step="1"
             value={years}
             onChange={(e) => setYears(Number(e.target.value))}
-            className="w-full accent-[#141414]"
+            className="w-full accent-ink"
           />
         </div>
       </div>
@@ -132,7 +144,7 @@ export function MonteCarloPanel({ result, years, setYears, initialAmount, setIni
       ) : (
         <>
           <SummaryCards result={result} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
             <FanChart result={result} years={years} />
             <FinalValueHistogram result={result} />
           </div>
