@@ -124,6 +124,14 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
           { kind: 'p', parts: ['Los retornos esperados son el promedio histórico de la ventana (no ARIMA), así que el backtest mide la regla y no un pronóstico. La ', { term: 'rotación anual', tip: 'Suma de |Δw|/2 en cada rebalanceo, dividida por los años de prueba.' }, ' muestra cuánto opera cada estrategia y el costo anual cuánto le resta.'] },
         ],
       },
+      {
+        title: '11. Moneda, órdenes y seguimiento',
+        blocks: [
+          { kind: 'p', parts: ['Con la ', { term: 'moneda de análisis', tip: 'USD o CLP, en el panel de parámetros.' }, ' cada precio se expresa en una sola moneda antes de calcular retornos, usando el dólar observado de cada día (USD/CLP de Yahoo Finance). En CLP, una acción de EE. UU. sube cuando sube el dólar; en USD, una acción chilena baja cuando sube el dólar.'] },
+          { kind: 'p', parts: ['La calculadora convierte cada operación en una orden al último precio: las acciones chilenas (.SN) van por Zesty en pesos y el resto por Racional en dólares, con las reglas de cada broker (acciones enteras o fraccionarias y orden mínima). Las órdenes se redondean hacia abajo, así que puede quedar un saldo sin invertir. Si ingresas tus tenencias actuales, marca los activos que se alejan de su peso objetivo más que la ', { term: 'banda de rebalanceo', tip: 'Distancia absoluta, en puntos porcentuales, entre el peso actual y el objetivo.' }, '.'] },
+          { kind: 'p', parts: ['El ', { term: 'seguimiento', tip: 'Compra y mantención desde el cierre del día en que se guardó, sin rebalancear.' }, ' de un portafolio guardado compara su rendimiento real con el que implicaba su retorno esperado, exp(μ · días / 252) − 1, y con el benchmark. La proyección de Monte Carlo suma los aportes mensuales al final de cada mes (21 días hábiles) y estima la probabilidad de alcanzar la meta como la fracción de las 10.000 simulaciones que termina por sobre ella.'] },
+        ],
+      },
     ],
   },
   en: {
@@ -225,6 +233,14 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
             ['The benchmark is bought at the start and held, with no costs.'],
           ] },
           { kind: 'p', parts: ['Expected returns are the window\'s historical mean (not ARIMA), so the backtest measures the rule rather than a forecast. ', { term: 'Annual turnover', tip: 'Sum of |Δw|/2 at each rebalance, divided by the years tested.' }, ' shows how much each strategy trades and the annual cost how much that takes away.'] },
+        ],
+      },
+      {
+        title: '11. Currency, orders and tracking',
+        blocks: [
+          { kind: 'p', parts: ['With the ', { term: 'analysis currency', tip: 'USD or CLP, in the parameters panel.' }, ' every price is expressed in one currency before computing returns, using each day\'s dollar rate (USD/CLP from Yahoo Finance). In CLP, a US stock rises when the dollar rises; in USD, a Chilean stock falls when the dollar rises.'] },
+          { kind: 'p', parts: ['The calculator turns each trade into an order at the latest price: Chilean (.SN) stocks go through Zesty in pesos and the rest through Racional in dollars, with each broker\'s rules (whole or fractional shares and minimum order). Orders are rounded down, so some cash may stay uninvested. If you enter your current holdings, it flags the assets that drift from their target weight by more than the ', { term: 'rebalancing band', tip: 'Absolute distance, in percentage points, between the current and the target weight.' }, '.'] },
+          { kind: 'p', parts: [{ term: 'Tracking', tip: 'Buy and hold from the close of the day it was saved, without rebalancing.' }, ' a saved portfolio compares its actual return with the one its expected return implied, exp(μ · days / 252) − 1, and with the benchmark. The Monte Carlo projection adds monthly contributions at the end of each month (21 trading days) and estimates the probability of reaching the goal as the share of the 10,000 simulations that end above it.'] },
         ],
       },
     ],

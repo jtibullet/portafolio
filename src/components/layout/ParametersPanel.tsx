@@ -233,9 +233,9 @@ function ConcentrationLimits({ controls }: { controls: PortfolioParamsControls }
 /** Portfolio construction rule and covariance estimator. */
 function MethodSettings({ controls }: { controls: PortfolioParamsControls }) {
   const { t } = useI18n();
-  const { params: { objective, covarianceMethod }, setObjective, setCovarianceMethod } = controls;
+  const { params: { objective, covarianceMethod, analysisCurrency }, setObjective, setCovarianceMethod, setAnalysisCurrency } = controls;
   return (
-    <div className="pt-4 border-t border-zinc-200 mt-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="pt-4 border-t border-zinc-200 mt-2 grid grid-cols-1 md:grid-cols-3 gap-6">
       <div className="space-y-2">
         <label htmlFor="objective" className={labelClass}>{t('params.objective')}</label>
         <select
@@ -266,6 +266,26 @@ function MethodSettings({ controls }: { controls: PortfolioParamsControls }) {
             </button>
           ))}
         </div>
+      </div>
+      <div className="space-y-2">
+        <span className={labelClass}>{t('params.currency')}</span>
+        <div className="flex border border-zinc-300 overflow-hidden rounded-sm" role="group" aria-label={t('params.currency')}>
+          {(['USD', 'CLP'] as const).map((c, i) => (
+            <button
+              key={c}
+              onClick={() => setAnalysisCurrency(c)}
+              aria-pressed={analysisCurrency === c}
+              className={cn(
+                "flex-1 py-2 text-[10px] font-bold uppercase transition-colors",
+                analysisCurrency === c ? "bg-ink text-paper" : "bg-zinc-50 hover:bg-zinc-200 text-ink",
+                i > 0 && "border-l border-zinc-300"
+              )}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-zinc-500">{t(`params.currencyHint.${analysisCurrency}`)}</p>
       </div>
     </div>
   );

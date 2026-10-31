@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { calculateLogReturns } from '../utils/quantMath';
 import type { MessageKey } from '../i18n';
 import type { PriceRow } from '../types';
 
 export interface MarketDataState {
   historicalData: PriceRow[];
   symbols: string[];
-  pricesBySymbol: Record<string, (number | null)[]>;
-  returnsBySymbol: Record<string, (number | null)[]>;
+  /** CLP per USD on each row's date; null when the rate history could not be loaded */
+  fx: number[] | null;
 }
 
 /** A user-facing error, translated when rendered. */
@@ -59,15 +58,7 @@ export function useMarketData() {
         throw new MarketDataError({ key: 'error.noData' });
       }
 
-      const pricesBySymbol: Record<string, (number | null)[]> = {};
-      const returnsBySymbol: Record<string, (number | null)[]> = {};
-      for (const sym of symbols) {
-        // Missing prices stay null so statistics can use pairwise deletion
-        pricesBySymbol[sym] = historicalData.map(row => row[sym] === null || row[sym] === undefined ? null : Number(row[sym]));
-        returnsBySymbol[sym] = calculateLogReturns(pricesBySymbol[sym]);
-      }
-
-      setData({ historicalData, symbols, pricesBySymbol, returnsBySymbol });
+      setData({ historicalData, symbols, fx: Array.isArray(resData.fx) ? resData.fx : null });
     } catch (err) {
       console.error("useMarketData error:", err);
       // fetch() rejects with a TypeError when the server can't be reached at all

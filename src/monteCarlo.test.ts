@@ -19,6 +19,17 @@ describe('runMonteCarlo', () => {
     expect(r.finalValues).toHaveLength(4000);
   });
 
+  it('adds monthly contributions and reports the probability of reaching a goal', async () => {
+    const r = await runMonteCarlo(1000, 0, 0, 1, 20, 1, undefined, { monthlyContribution: 100, goal: 2200 });
+    // 252 steps = 12 contributions of 100 with no growth
+    expect(r.totalContributed).toBe(2200);
+    expect(r.percentiles.p50).toBeCloseTo(2200, 8);
+    expect(r.goalProbability).toBe(1);
+    const higher = await runMonteCarlo(1000, 0, 0, 1, 20, 1, undefined, { monthlyContribution: 100, goal: 2201 });
+    expect(higher.goalProbability).toBe(0);
+    expect((await runMonteCarlo(1000, 0.05, 0.2, 1, 20, 1)).goalProbability).toBeNull();
+  });
+
   it('is repeatable across runs (seeded)', async () => {
     const a = await runMonteCarlo(100, 0.05, 0.15, 1, 200, 2);
     const b = await runMonteCarlo(100, 0.05, 0.15, 1, 200, 2);

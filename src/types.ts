@@ -133,6 +133,9 @@ export interface SavedPortfolio {
   volatility: number;
   sharpeRatio: number;
   weights: number[];
+  /** Missing on portfolios saved before these were stored */
+  benchmark?: string | null;
+  currency?: 'USD' | 'CLP' | null;
 }
 
 /** User-controlled inputs that drive the analysis */
@@ -146,6 +149,8 @@ export interface PortfolioParams {
   maxWeights: WeightBounds;
   objective: Objective;
   covarianceMethod: CovarianceMethod;
+  /** Currency every price is expressed in before computing returns */
+  analysisCurrency: 'USD' | 'CLP';
 }
 
 /** Why the optimizer could not produce a portfolio; rendered as a translated message. */
@@ -156,4 +161,13 @@ export interface OptimizationFailure {
   max?: number;
   /** Ticker the failure refers to, for 'minAboveMax' */
   symbol?: string;
+}
+
+/** Inputs of the Monte Carlo projection */
+export interface MonteCarloSettings {
+  years: number;
+  initialAmount: number;
+  monthlyContribution: number;
+  /** Target final value; 0 for none */
+  goal: number;
 }

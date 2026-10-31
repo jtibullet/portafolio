@@ -12,7 +12,21 @@ export interface MonteCarloResult {
   };
   paths: number[][]; // Subset of paths for plotting
   finalValues: number[]; // All 10,000 final values for histogram
+  /** Initial investment plus every monthly contribution */
+  totalContributed: number;
+  /** Share of simulations ending at or above the goal; null without a goal */
+  goalProbability: number | null;
 }
+
+export interface MonteCarloOptions {
+  /** Added at the end of every month (21 trading days) */
+  monthlyContribution?: number;
+  /** Target final value */
+  goal?: number;
+}
+
+/** Trading days per month, when contributions are added */
+const MONTH_STEPS = 21;
 
 /**
  * @param expectedAnnualLogReturn Annualized mean of daily log returns (mean * 252).
@@ -25,7 +39,8 @@ export async function runMonteCarlo(
   years: number,
   numSimulations: number = 10000,
   pathsToPlot: number = 100,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  { monthlyContribution = 0, goal = 0 }: MonteCarloOptions = {},
 ): Promise<MonteCarloResult> {
   // Deterministic seed for repeatable Monte Carlo paths
   setSeed(42);
@@ -50,6 +65,7 @@ export async function runMonteCarlo(
       for (let step = 1; step <= steps; step++) {
         const z = randomNormal();
         currentVal = currentVal * Math.exp(drift + vol * z);
+        if (monthlyContribution && step % MONTH_STEPS === 0) currentVal += monthlyContribution;
         if (path) {
           path.push(currentVal);
         }
@@ -71,9 +87,14 @@ export async function runMonteCarlo(
   const p50 = sortedFinals[Math.floor(numSimulations * 0.50)];
   const p95 = sortedFinals[Math.floor(numSimulations * 0.95)];
 
+  let reached = 0;
+  if (goal > 0) for (const v of sortedFinals) if (v >= goal) reached++;
+
   return {
     percentiles: { p5, p50, p95 },
     paths,
-    finalValues: Array.from(sortedFinals)
+    finalValues: Array.from(sortedFinals),
+    totalContributed: initialInvestment + monthlyContribution * Math.floor(steps / MONTH_STEPS),
+    goalProbability: goal > 0 ? reached / numSimulations : null,
   };
 }

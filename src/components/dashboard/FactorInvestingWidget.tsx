@@ -12,9 +12,19 @@ const STYLE_COLORS: Record<StyleFactor, string> = { 'Value': '#166534', 'Blend':
 
 const isFund = (meta: Partial<AssetMetadata>) => meta.quoteTypeStr === 'ETF' || meta.quoteTypeStr === 'MUTUALFUND' || meta.sector === 'ETF / Fondo';
 
-/** Size by market cap (or fund assets): >10B large, 2-10B mid, below small. */
-function classifySize(meta: Partial<AssetMetadata>): SizeFactor {
-  const cap = meta.marketCap || meta.totalAssets;
+/**
+ * Market cap (or fund assets) in USD. Yahoo reports Chilean (.SN) caps in CLP, converted here with
+ * `rate` (CLP per USD); null when unknown.
+ */
+function usdCap(meta: Partial<AssetMetadata>, rate: number | null) {
+  const cap = meta.marketCap || meta.totalAssets || null;
+  if (cap === null || !meta.symbol?.endsWith('.SN')) return cap;
+  return rate ? cap / rate : null;
+}
+
+/** Size by market cap in USD: >10B large, 2-10B mid, below small. */
+function classifySize(meta: Partial<AssetMetadata>, rate: number | null): SizeFactor {
+  const cap = usdCap(meta, rate);
   if (cap) return cap > 10e9 ? 'Large Cap' : cap >= 2e9 ? 'Mid Cap' : 'Small Cap';
   return isFund(meta) ? 'Broad Market' : 'Unclassified';
 }
@@ -82,7 +92,7 @@ function ExposurePie<K extends string>({ title, exposure, colors }: { title: str
   );
 }
 
-export function FactorInvestingWidget({ metadata, quantStats }: { metadata: AssetMetadata[]; quantStats: QuantStats }) {
+export function FactorInvestingWidget({ metadata, quantStats, exchangeRate }: { metadata: AssetMetadata[]; quantStats: QuantStats; exchangeRate: number | null }) {
   const { t, f } = useI18n();
   const [open, toggle] = useCollapsible('factorInvesting', true);
   if (!quantStats.optimization) return null;
@@ -94,7 +104,7 @@ export function FactorInvestingWidget({ metadata, quantStats }: { metadata: Asse
   const assets = quantStats.matrixSymbols.map((sym, i) => {
     const meta: Partial<AssetMetadata> = metadata.find(m => m.symbol === sym) || {};
     const pe = meta.trailingPE || meta.forwardPE || null;
-    const size = classifySize(meta);
+    const size = classifySize(meta, exchangeRate);
     const style = classifyStyle(meta, pe);
     sizeExposure[size] += weights[i];
     styleExposure[style] += weights[i];
@@ -152,7 +162,7 @@ export function FactorInvestingWidget({ metadata, quantStats }: { metadata: Asse
                     <td className={`${td} font-bold`}>{symbol}</td>
                     <td className={td}>{f.pct(weight, 1)}</td>
                     <td className={`${td} text-right`}>
-                      {meta.marketCap ? `$${f.num(meta.marketCap / 1e9, 1)}B` : meta.totalAssets ? `~$${f.num(meta.totalAssets / 1e9, 1)}B` : t('common.na')}
+                      {(() => { const cap = usdCap(meta, exchangeRate); return cap === null ? t('common.na') : `${meta.marketCap ? '' : '~'}US$${f.num(cap / 1e9, 1)}B`; })()}
                     </td>
                     <td className={`${td} text-right`}>{pe ? f.num(pe) : t('common.na')}</td>
                     <td className={`${td} text-right`}>{meta.priceToBook ? f.num(meta.priceToBook) : t('common.na')}</td>

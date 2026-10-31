@@ -23,6 +23,8 @@ const COL_SPAN: Record<number, string> = { 2: "lg:col-span-2", 3: "lg:col-span-3
 interface DashboardTabProps {
   quantStats: QuantStats;
   metadata: AssetMetadata[] | null;
+  /** CLP per USD */
+  exchangeRate: number | null;
   params: PortfolioParams;
   isOptimizing: boolean;
   savedPortfolios: SavedPortfolio[];
@@ -31,7 +33,7 @@ interface DashboardTabProps {
 }
 
 /** Content of one widget, or null when the data it needs is not available. */
-function renderWidget(id: string, { quantStats, metadata, params, isOptimizing }: DashboardTabProps): React.ReactNode {
+function renderWidget(id: string, { quantStats, metadata, exchangeRate, params, isOptimizing }: DashboardTabProps): React.ReactNode {
   const hasOptimization = !!quantStats.optimization;
   switch (id) {
     case 'coreMetrics':
@@ -47,7 +49,7 @@ function renderWidget(id: string, { quantStats, metadata, params, isOptimizing }
     case 'sectorBreakdown':
       return hasOptimization && metadata ? <SectorBreakdownWidget quantStats={quantStats} metadata={metadata} /> : null;
     case 'factorInvesting':
-      return hasOptimization && metadata ? <FactorInvestingWidget metadata={metadata} quantStats={quantStats} /> : null;
+      return hasOptimization && metadata ? <FactorInvestingWidget metadata={metadata} quantStats={quantStats} exchangeRate={exchangeRate} /> : null;
     case 'objectiveComparison':
       return hasOptimization && Object.keys(quantStats.alternatives).length > 1 ? <ObjectiveComparisonWidget quantStats={quantStats} /> : null;
     case 'portfolioMetrics':
@@ -112,8 +114,8 @@ export const DashboardTab = React.memo(function DashboardTab(props: DashboardTab
         </DndContext>
       </div>
 
-      {props.quantStats.optimization && <InvestmentCalculator quantStats={props.quantStats} saving={props.saving} onSave={props.onSave} />}
-      <SavedPortfoliosHistory savedPortfolios={props.savedPortfolios} />
+      {props.quantStats.optimization && <InvestmentCalculator quantStats={props.quantStats} metadata={props.metadata} exchangeRate={props.exchangeRate} saving={props.saving} onSave={props.onSave} />}
+      <SavedPortfoliosHistory savedPortfolios={props.savedPortfolios} defaultBenchmark={props.params.selectedBenchmark} />
     </>
   );
 });
