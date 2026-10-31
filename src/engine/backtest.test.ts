@@ -138,6 +138,22 @@ describe('runBacktest', () => {
     expect(hrp.weights.at(-1)![2]).toBeGreaterThan(0);
   });
 
+  it('with bands, trades only when a weight drifts past the band', () => {
+    const trending = { A: dates.map((_, t) => 100 * Math.exp(0.004 * t)), B: new Array(N).fill(50), BENCH: new Array(N).fill(5) };
+    const input = { ...base(rows(dates, trending), ['A', 'B']), frequency: 'bands' as const };
+    const equal = (r: ReturnType<typeof runBacktest>) => {
+      if (!r.ok) throw new Error('backtest failed');
+      return r.strategies.find(s => s.strategy === 'equalWeight')!;
+    };
+    const tight = equal(runBacktest({ ...input, bandWidth: 0.02 }));
+    const wide = equal(runBacktest({ ...input, bandWidth: 0.6 }));
+    expect(wide.trades).toBe(1);
+    expect(tight.trades).toBeGreaterThan(5);
+    expect(tight.metrics.annualTurnover).toBeGreaterThan(0);
+    const monthly = equal(runBacktest({ ...input, frequency: 'monthly' }));
+    expect(monthly.trades).toBe(equal(runBacktest({ ...input, frequency: 'monthly' })).weights.length);
+  });
+
   it('reports insufficient data when the history is shorter than the window plus a quarter', () => {
     const result = runBacktest({ ...base(rows(dates.slice(0, 150), series), ['A', 'B']), lookbackDays: 126 });
     expect(result).toMatchObject({ ok: false, reason: 'insufficientData', availableDays: 150 });

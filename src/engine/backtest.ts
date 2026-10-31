@@ -12,7 +12,8 @@ import type { CostModel } from './costs';
 import { DEFAULT_MAX_WEIGHT, defaultMinWeight, TRADING_DAYS } from '../constants';
 import type { CovarianceMethod, PriceRow, WeightBounds } from '../types';
 
-export type RebalanceFrequency = 'monthly' | 'quarterly' | 'annual';
+/** Calendar rebalancing, or 'bands': trade only when a weight drifts too far from its target */
+export type RebalanceFrequency = 'monthly' | 'quarterly' | 'annual' | 'bands';
 export type BacktestStrategy = Objective | 'equalWeight';
 export const BACKTEST_STRATEGIES: BacktestStrategy[] = ['maxSharpe', 'minVariance', 'riskParity', 'hrp', 'equalWeight'];
 
@@ -30,6 +31,8 @@ export interface BacktestInput {
   /** Trading days of history used to estimate each rebalance */
   lookbackDays: number;
   frequency: RebalanceFrequency;
+  /** With 'bands': rebalance when any weight is more than this far (absolute) from its target */
+  bandWidth?: number;
   costs: CostModel;
   /** Currency the account is funded in; trading an asset quoted in the other one pays the FX cost */
   baseCurrency: 'USD' | 'CLP';
@@ -49,8 +52,10 @@ export interface StrategyResult {
     annualCost: number;
     finalValue: number;
   };
-  /** Target weights chosen at each rebalance (aligned with `rebalanceDates`) */
+  /** Target weights estimated at each rebalance date (aligned with `rebalanceDates`) */
   weights: number[][];
+  /** Times the portfolio was actually traded, including the initial purchase */
+  trades: number;
   /** Rebalances that fell back to equal weights because the optimizer had no feasible answer */
   fallbacks: number;
   /** Simple return per calendar year of the test period */
@@ -73,6 +78,7 @@ export function isNewPeriod(previous: string, date: string, frequency: Rebalance
   const [y1, m1] = [Number(date.slice(0, 4)), Number(date.slice(5, 7))];
   if (frequency === 'annual') return y1 !== y0;
   if (frequency === 'quarterly') return y1 !== y0 || Math.floor((m1 - 1) / 3) !== Math.floor((m0 - 1) / 3);
+  // Monthly, and band rebalancing, which re-estimates targets monthly but trades only on a breach
   return y1 !== y0 || m1 !== m0;
 }
 
@@ -162,6 +168,7 @@ function summarize(
   costPaid: number,
   weights: number[][],
   fallbacks: number,
+  trades: number,
 ): StrategyResult {
   const daily = values.map((v, t) => (t === 0 ? null : Math.log(v / values[t - 1])));
   const years = (values.length - 1) / TRADING_DAYS;
@@ -195,13 +202,14 @@ function summarize(
       finalValue,
     },
     weights,
+    trades,
     fallbacks,
     yearlyReturns,
   };
 }
 
 export function runBacktest(input: BacktestInput): BacktestResult {
-  const { historicalData, tickers, benchmark, riskFreeRate, minWeights, maxWeights, covarianceMethod, lookbackDays, frequency, costs, baseCurrency } = input;
+  const { historicalData, tickers, benchmark, riskFreeRate, minWeights, maxWeights, covarianceMethod, lookbackDays, frequency, bandWidth = 0.05, costs, baseCurrency } = input;
   const dates = historicalData.map(row => row.date);
   const neededDays = lookbackDays + TRADING_DAYS / 4;
   if (dates.length < neededDays || tickers.length === 0) {
@@ -251,6 +259,8 @@ export function runBacktest(input: BacktestInput): BacktestResult {
     let turnover = 0;
     let costPaid = 0;
     let k = 0;
+    let trades = 0;
+    let target: number[] = [];
     const values: number[] = [];
     for (let t = start; t < dates.length; t++) {
       if (t > start) {
@@ -267,9 +277,11 @@ export function runBacktest(input: BacktestInput): BacktestResult {
         value *= growth;
         holdings = growth > 0 ? next.map(g => g / growth) : next;
       }
-      if (rebalanceSet.has(t)) {
-        // Trades happen at the close, after that day's return is known
-        const target = targets[strategy][k++];
+      if (rebalanceSet.has(t)) target = targets[strategy][k++];
+      // Trades happen at the close, after that day's return is known
+      const breach = frequency === 'bands' && target.some((w, i) => Math.abs(w - holdings[i]) > bandWidth);
+      if (t === start || (frequency === 'bands' ? breach : rebalanceSet.has(t))) {
+        trades++;
         const traded = target.map((w, i) => Math.abs(w - holdings[i]));
         const costShare = traded.reduce((s, d, i) => s + d * tradeRate[i], 0);
         turnover += t === start ? 0 : traded.reduce((a, b) => a + b, 0) / 2;
@@ -279,7 +291,7 @@ export function runBacktest(input: BacktestInput): BacktestResult {
       }
       values.push(value);
     }
-    return summarize(strategy, values, testDates, riskFreeRate, turnover, costPaid, targets[strategy], fallbacks[strategy]);
+    return summarize(strategy, values, testDates, riskFreeRate, turnover, costPaid, targets[strategy], fallbacks[strategy], trades);
   });
 
   // Benchmark: buy and hold from the first test day, no costs; missing prices carry the last one
@@ -292,7 +304,7 @@ export function runBacktest(input: BacktestInput): BacktestResult {
       if (p !== null) last = p;
       return (100 * last!) / base;
     });
-    strategies.push(summarize('benchmark', benchValues, testDates, riskFreeRate, 0, 0, [], 0));
+    strategies.push(summarize('benchmark', benchValues, testDates, riskFreeRate, 0, 0, [], 0, 1));
   }
 
   return { ok: true, dates: testDates, rebalanceDates: rebalances.map(t => dates[t]), tickers, strategies };

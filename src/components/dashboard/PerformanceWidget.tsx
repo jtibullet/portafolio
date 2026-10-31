@@ -22,6 +22,7 @@ export function PerformanceWidget({ quantStats }: { quantStats: QuantStats }) {
           </span>
         </div>
       </div>
+      <p className="text-[10px] font-mono text-zinc-500 px-2 mb-2">{t('perf.note')}</p>
       <div className={`flex-1 ${DARK_CHART.background} border border-ink p-2 sm:p-4 min-h-[300px]`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>

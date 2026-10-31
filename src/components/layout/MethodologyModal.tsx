@@ -116,6 +116,7 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
           { kind: 'p', parts: ['La pestaña Backtest simula cómo habría funcionado cada regla en el pasado ', { term: 'sin mirar el futuro', tip: 'Cada decisión usa solo precios conocidos al cierre del día del rebalanceo; los precios posteriores no influyen en ella.' }, '. En cada fecha de rebalanceo (primer día hábil del mes, trimestre o año) se estiman retornos y covarianza con la ventana anterior (6 meses, 1 o 2 años) y se calculan los pesos de cada objetivo con los mismos límites del panel.'] },
           { kind: 'list', items: [
             ['Entre rebalanceos los pesos se mueven con los precios (no se rebalancea a diario).'],
+            [{ term: 'Por bandas', tip: 'Evita operar por desvíos pequeños: menos rotación y menos costos.' }, ': los objetivos se re-estiman cada mes, pero solo se opera el día en que algún peso se aleja de su objetivo más que la banda elegida.'],
             ['Cada compra o venta paga la comisión, la mitad del spread y, si corresponde, el costo de cambio (sección 9).'],
             ['Un activo entra solo cuando tiene precio ese día y retornos en al menos el 80 % de la ventana.'],
             ['El benchmark se compra al inicio y se mantiene, sin costos.'],
@@ -218,6 +219,7 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
           { kind: 'p', parts: ['The Backtest tab simulates how each rule would have performed in the past ', { term: 'without look-ahead', tip: 'Every decision uses only prices known at the close of the rebalance day; later prices cannot affect it.' }, '. On each rebalance date (first trading day of the month, quarter or year) returns and covariance are estimated from the preceding window (6 months, 1 or 2 years) and each objective\'s weights are computed with the same bounds as the parameters panel.'] },
           { kind: 'list', items: [
             ['Between rebalances, weights drift with prices (there is no daily rebalancing).'],
+            [{ term: 'Bands', tip: 'Avoids trading on small deviations: less turnover and lower costs.' }, ': targets are re-estimated monthly, but trades happen only on the day a weight drifts from its target by more than the chosen band.'],
             ['Every buy or sell pays the commission, half the spread and, when applicable, the FX cost (section 9).'],
             ['An asset joins only when it has a price that day and returns on at least 80% of the window.'],
             ['The benchmark is bought at the start and held, with no costs.'],

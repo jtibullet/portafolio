@@ -17,7 +17,8 @@ import type { PortfolioParams, PriceRow } from '../../types';
 type Strategy = StrategyResult['strategy'];
 
 const LOOKBACKS = [126, 252, 504];
-const FREQUENCIES: RebalanceFrequency[] = ['monthly', 'quarterly', 'annual'];
+const FREQUENCIES: RebalanceFrequency[] = ['monthly', 'quarterly', 'annual', 'bands'];
+const BANDS = [0.03, 0.05, 0.1];
 const COLORS: Record<Strategy, string> = {
   maxSharpe: '#2563eb',
   minVariance: '#16a34a',
@@ -35,6 +36,7 @@ const td = "p-2 border-r border-zinc-200 text-right whitespace-nowrap";
 interface Settings {
   lookbackDays: number;
   frequency: RebalanceFrequency;
+  bandWidth?: number;
 }
 
 function useBacktest(historicalData: PriceRow[], symbols: string[], params: PortfolioParams, settings: Settings, costs: CostModel, baseCurrency: 'USD' | 'CLP') {
@@ -60,6 +62,7 @@ function useBacktest(historicalData: PriceRow[], symbols: string[], params: Port
       covarianceMethod: inputs.covarianceMethod,
       lookbackDays: inputs.settings.lookbackDays,
       frequency: inputs.settings.frequency,
+      bandWidth: inputs.settings.bandWidth ?? 0.05,
       costs: inputs.costs,
       baseCurrency: inputs.baseCurrency,
     })
@@ -125,6 +128,19 @@ function SettingsBar({ settings, onChange, costs, onCostsChange, baseCurrency, o
               </button>
             ))}
           </div>
+          {settings.frequency === 'bands' && (
+            <div className="mt-2 flex items-center gap-2">
+              <label htmlFor="bt-band" className="text-[10px] font-mono text-zinc-500">{t('bt.bandWidth')}</label>
+              <select
+                id="bt-band"
+                value={settings.bandWidth ?? 0.05}
+                onChange={(e) => onChange({ ...settings, bandWidth: Number(e.target.value) })}
+                className="bg-white border border-zinc-300 p-1 text-xs text-ink focus:outline-none focus:border-ink"
+              >
+                {BANDS.map(b => <option key={b} value={b}>{t('bt.bandPoints', { n: b * 100 })}</option>)}
+              </select>
+            </div>
+          )}
         </div>
         <div>
           <span className={label}>{t('bt.currency')}</span>
@@ -187,6 +203,7 @@ function MetricsTable({ result, selected, benchmark }: { result: Extract<Backtes
     { label: t('metrics.sortino'), value: s => f.num(s.metrics.sortino), metric: s => s.metrics.sortino, best: 'max' },
     { label: t('metrics.maxDrawdown'), value: s => `-${f.pct(s.metrics.maxDrawdown, 1)}`, metric: s => s.metrics.maxDrawdown, best: 'min' },
     { label: t('metrics.calmar'), value: s => f.num(s.metrics.calmar), metric: s => s.metrics.calmar, best: 'max' },
+    { label: t('bt.trades'), tip: t('bt.tip.trades'), value: s => (s.strategy === 'benchmark' ? '—' : f.num(s.trades, 0)) },
     { label: t('bt.turnover'), tip: t('bt.tip.turnover'), value: s => (s.strategy === 'benchmark' ? '—' : f.pct(s.metrics.annualTurnover, 0)) },
     { label: t('bt.cost'), tip: t('bt.tip.cost'), value: s => (s.strategy === 'benchmark' ? '—' : f.pct(s.metrics.annualCost, 2)) },
     { label: t('bt.final'), value: s => f.num(s.metrics.finalValue, 1), metric: s => s.metrics.finalValue, best: 'max' },

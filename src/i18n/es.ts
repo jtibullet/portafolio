@@ -66,6 +66,11 @@ export const es = {
   'bt.freq.monthly': 'Mensual',
   'bt.freq.quarterly': 'Trimestral',
   'bt.freq.annual': 'Anual',
+  'bt.freq.bands': 'Por bandas',
+  'bt.bandWidth': 'Rebalancear si un peso se aleja más de',
+  'bt.bandPoints': '{n} puntos',
+  'bt.trades': 'Rebalanceos',
+  'bt.tip.trades': 'Veces que se operó el portafolio, incluida la compra inicial. Por bandas, los objetivos se re-estiman cada mes pero solo se opera cuando un peso sale de la banda.',
   'bt.currency': 'Moneda de la cuenta',
   'bt.note': 'Cada rebalanceo estima los portafolios solo con los datos disponibles hasta ese día (sin mirar el futuro) y paga los costos de arriba. Los retornos esperados son el promedio histórico de la ventana (sin ARIMA); los límites de peso y la covarianza son los del panel de parámetros. Resultados pasados no garantizan resultados futuros.',
   'bt.running': 'Calculando backtest…',
@@ -129,7 +134,8 @@ export const es = {
   'tip.alpha': 'Alfa de Jensen: retorno anual real − retorno esperado según CAPM',
 
   // Dashboard widgets
-  'perf.title': 'Backtest histórico (12M)',
+  'perf.title': 'Ajuste histórico 12M (dentro de muestra)',
+  'perf.note': 'Aplica los pesos de hoy a los datos con que se calcularon, así que es optimista. Para una prueba realista usa la pestaña Backtest.',
   'perf.vsBench': '{value} vs benchmark',
   'perf.portfolio': 'Portafolio',
   'perf.benchmark': 'Benchmark',
