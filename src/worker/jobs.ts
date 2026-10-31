@@ -5,6 +5,7 @@
 import { prepareAnalysis, optimizePreparedAnalysis, type AnalysisInput } from '../engine/portfolioAnalysis';
 import { runBlackLittermanAnalysis, type BlackLittermanInput } from '../engine/blackLittermanAnalysis';
 import { runMonteCarlo } from '../monteCarlo';
+import { runBacktest, type BacktestInput } from '../engine/backtest';
 
 export async function analyzeJob(input: AnalysisInput) {
   const prepared = prepareAnalysis(input);
@@ -23,6 +24,7 @@ export interface MonteCarloInput {
 export const JOBS = {
   analyze: analyzeJob,
   blackLitterman: (input: BlackLittermanInput) => runBlackLittermanAnalysis(input),
+  backtest: (input: BacktestInput) => runBacktest(input),
   monteCarlo: (input: MonteCarloInput) => runMonteCarlo(input.initialAmount, input.expectedReturn, input.volatility, input.years),
 };
 

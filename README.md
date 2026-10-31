@@ -4,6 +4,7 @@ Quantitative portfolio optimization web app: Markowitz (max Sharpe and minimum v
 risk parity, hierarchical risk parity (HRP), Ledoit-Wolf shrinkage covariance, CAPM,
 Black-Litterman with a market-cap prior, Monte Carlo, ARIMA forecasts, stress testing,
 tail-risk metrics (Sortino, max drawdown, Calmar), transaction-cost estimates,
+a walk-forward backtest of every portfolio rule with trading costs,
 sentiment and asset recommendations.
 Market data comes from Yahoo Finance; saved portfolios are stored in a local SQLite file (`portfolios.db`).
 
@@ -47,7 +48,7 @@ GitHub Actions runs the type check, tests and build on every pull request.
 
 | Path | Contents |
 |---|---|
-| `src/engine/` | Pure analysis pipeline: statistics, Ledoit-Wolf covariance, objectives (risk parity, HRP), risk metrics, trading costs, Black-Litterman, recommendations, chart data |
+| `src/engine/` | Pure analysis pipeline: statistics, Ledoit-Wolf covariance, objectives (risk parity, HRP), risk metrics, trading costs, walk-forward backtest, Black-Litterman, recommendations, chart data |
 | `src/optimization.ts`, `src/qp.ts` | Exact max-Sharpe / min-variance optimizer (quadratic programming via `quadprog`) |
 | `src/utils/quantMath.ts`, `src/advancedQuant.ts`, `src/monteCarlo.ts` | Core math |
 | `src/worker/` | Web Worker that runs the analysis, Black-Litterman and Monte Carlo off the UI thread |

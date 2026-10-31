@@ -111,39 +111,16 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
         ],
       },
       {
-        title: '6. Shrinkage covariance (Ledoit-Wolf)',
+        title: '10. Backtest walk-forward',
         blocks: [
-          { kind: 'p', parts: ['With few years of data and many assets the sample covariance S is noisy and the optimizer exploits its errors. By default the engine uses ', { term: 'Ledoit-Wolf shrinkage', tip: 'Ledoit & Wolf (2004) derive the intensity δ that minimizes the expected squared error against the true covariance.' }, ', which blends S with a common-variance target:'] },
-          { kind: 'formula', formula: 'ledoitWolf' },
-          { kind: 'p', parts: ['The intensity δ (between 0 and 1) is estimated from the data itself and shown in the comparison table. Displayed correlations remain the sample ones; you can switch back to the sample covariance in the parameters panel.'] },
-        ],
-      },
-      {
-        title: '7. Optimization objectives',
-        blocks: [
-          { kind: 'p', parts: ['Besides maximum Sharpe, the engine builds three alternative portfolios and compares them side by side:'] },
+          { kind: 'p', parts: ['La pestaña Backtest simula cómo habría funcionado cada regla en el pasado ', { term: 'sin mirar el futuro', tip: 'Cada decisión usa solo precios conocidos al cierre del día del rebalanceo; los precios posteriores no influyen en ella.' }, '. En cada fecha de rebalanceo (primer día hábil del mes, trimestre o año) se estiman retornos y covarianza con la ventana anterior (6 meses, 1 o 2 años) y se calculan los pesos de cada objetivo con los mismos límites del panel.'] },
           { kind: 'list', items: [
-            [{ term: 'Minimum variance', tip: 'Ignores expected returns, the noisiest estimate, and minimizes risk alone.' }, ': min wᵀΣw under the same constraints.'],
-            [{ term: 'Risk parity', tip: 'Equal Risk Contribution, solved by cyclical coordinate descent (Spinu, 2013).' }, ': every asset contributes the same share of total risk:'],
-            [{ term: 'HRP', tip: 'Hierarchical Risk Parity (López de Prado, 2016): clusters assets by correlation and allocates by recursive bisection, without inverting the covariance matrix.' }, ': hierarchical clustering (single linkage) and inverse-variance allocation between clusters.'],
+            ['Entre rebalanceos los pesos se mueven con los precios (no se rebalancea a diario).'],
+            ['Cada compra o venta paga la comisión, la mitad del spread y, si corresponde, el costo de cambio (sección 9).'],
+            ['Un activo entra solo cuando tiene precio ese día y retornos en al menos el 80 % de la ventana.'],
+            ['El benchmark se compra al inicio y se mantiene, sin costos.'],
           ] },
-          { kind: 'formula', formula: 'riskParity' },
-          { kind: 'p', parts: ['Risk parity and HRP do not support per-asset bounds natively, so their weights are ', { term: 'projected onto the bounds', tip: 'Out-of-range weights are clipped and the gap is spread in proportion to the room each asset has left.' }, ' you configured.'] },
-        ],
-      },
-      {
-        title: '8. Tail-risk metrics',
-        blocks: [
-          { kind: 'p', parts: ['The ', { term: 'Sortino ratio', tip: 'Like Sharpe, but only penalizes volatility on days below the risk-free rate.' }, ' and the ', { term: 'Calmar ratio', tip: 'Annualized return divided by the maximum historical drawdown.' }, ' complement Sharpe:'] },
-          { kind: 'formula', formula: 'sortino' },
-          { kind: 'p', parts: ['The ', { term: 'maximum drawdown', tip: 'The largest loss from a previous peak to a later trough, applying the optimal weights to history.' }, ' and the trading days it took to regain the previous peak are computed on the portfolio\'s historical series.'] },
-        ],
-      },
-      {
-        title: '9. Transaction costs',
-        blocks: [
-          { kind: 'p', parts: ['The investment calculator estimates the cost of each buy or sell from the broker commission, half the ', { term: 'spread', tip: 'Gap between bid and ask prices; on average a trade pays half of it.' }, ' and, when the payment currency differs from the asset\'s (.SN stocks in CLP, the rest in USD), the conversion cost (V is the traded amount, c the commission, s the spread and fₓ the FX cost):'] },
-          { kind: 'formula', formula: 'cost' },
+          { kind: 'p', parts: ['Los retornos esperados son el promedio histórico de la ventana (no ARIMA), así que el backtest mide la regla y no un pronóstico. La ', { term: 'rotación anual', tip: 'Suma de |Δw|/2 en cada rebalanceo, dividida por los años de prueba.' }, ' muestra cuánto opera cada estrategia y el costo anual cuánto le resta.'] },
         ],
       },
     ],
@@ -197,6 +174,55 @@ const CONTENT: Record<Lang, { heading: string; subheading: string; sections: Sec
           { kind: 'p', parts: ['To project future wealth and measure tail risk, a ', { term: 'geometric Brownian motion', tip: 'A stochastic process where the logarithm of the price follows a Brownian motion.' }, ' simulates 10,000 independent paths of the optimal portfolio:'] },
           { kind: 'formula', formula: 'gbm' },
           { kind: 'p', parts: ['μ', 'ₗₒᵍ', ' is the annualized mean of log returns (it already accounts for volatility drag) and Z is a standard normal draw. The terminal distribution gives the ', { term: '5th percentile (value at risk)', tip: 'With 95% confidence the portfolio ends above this value.' }, ' and the 95th percentile.'] },
+        ],
+      },
+      {
+        title: '6. Shrinkage covariance (Ledoit-Wolf)',
+        blocks: [
+          { kind: 'p', parts: ['With few years of data and many assets the sample covariance S is noisy and the optimizer exploits its errors. By default the engine uses ', { term: 'Ledoit-Wolf shrinkage', tip: 'Ledoit & Wolf (2004) derive the intensity δ that minimizes the expected squared error against the true covariance.' }, ', which blends S with a common-variance target:'] },
+          { kind: 'formula', formula: 'ledoitWolf' },
+          { kind: 'p', parts: ['The intensity δ (between 0 and 1) is estimated from the data itself and shown in the comparison table. Displayed correlations remain the sample ones; you can switch back to the sample covariance in the parameters panel.'] },
+        ],
+      },
+      {
+        title: '7. Optimization objectives',
+        blocks: [
+          { kind: 'p', parts: ['Besides maximum Sharpe, the engine builds three alternative portfolios and compares them side by side:'] },
+          { kind: 'list', items: [
+            [{ term: 'Minimum variance', tip: 'Ignores expected returns, the noisiest estimate, and minimizes risk alone.' }, ': min wᵀΣw under the same constraints.'],
+            [{ term: 'Risk parity', tip: 'Equal Risk Contribution, solved by cyclical coordinate descent (Spinu, 2013).' }, ': every asset contributes the same share of total risk:'],
+            [{ term: 'HRP', tip: 'Hierarchical Risk Parity (López de Prado, 2016): clusters assets by correlation and allocates by recursive bisection, without inverting the covariance matrix.' }, ': hierarchical clustering (single linkage) and inverse-variance allocation between clusters.'],
+          ] },
+          { kind: 'formula', formula: 'riskParity' },
+          { kind: 'p', parts: ['Risk parity and HRP do not support per-asset bounds natively, so their weights are ', { term: 'projected onto the bounds', tip: 'Out-of-range weights are clipped and the gap is spread in proportion to the room each asset has left.' }, ' you configured.'] },
+        ],
+      },
+      {
+        title: '8. Tail-risk metrics',
+        blocks: [
+          { kind: 'p', parts: ['The ', { term: 'Sortino ratio', tip: 'Like Sharpe, but only penalizes volatility on days below the risk-free rate.' }, ' and the ', { term: 'Calmar ratio', tip: 'Annualized return divided by the maximum historical drawdown.' }, ' complement Sharpe:'] },
+          { kind: 'formula', formula: 'sortino' },
+          { kind: 'p', parts: ['The ', { term: 'maximum drawdown', tip: 'The largest loss from a previous peak to a later trough, applying the optimal weights to history.' }, ' and the trading days it took to regain the previous peak are computed on the portfolio\'s historical series.'] },
+        ],
+      },
+      {
+        title: '9. Transaction costs',
+        blocks: [
+          { kind: 'p', parts: ['The investment calculator estimates the cost of each buy or sell from the broker commission, half the ', { term: 'spread', tip: 'Gap between bid and ask prices; on average a trade pays half of it.' }, ' and, when the payment currency differs from the asset\'s (.SN stocks in CLP, the rest in USD), the conversion cost (V is the traded amount, c the commission, s the spread and fₓ the FX cost):'] },
+          { kind: 'formula', formula: 'cost' },
+        ],
+      },
+      {
+        title: '10. Walk-forward backtest',
+        blocks: [
+          { kind: 'p', parts: ['The Backtest tab simulates how each rule would have performed in the past ', { term: 'without look-ahead', tip: 'Every decision uses only prices known at the close of the rebalance day; later prices cannot affect it.' }, '. On each rebalance date (first trading day of the month, quarter or year) returns and covariance are estimated from the preceding window (6 months, 1 or 2 years) and each objective\'s weights are computed with the same bounds as the parameters panel.'] },
+          { kind: 'list', items: [
+            ['Between rebalances, weights drift with prices (there is no daily rebalancing).'],
+            ['Every buy or sell pays the commission, half the spread and, when applicable, the FX cost (section 9).'],
+            ['An asset joins only when it has a price that day and returns on at least 80% of the window.'],
+            ['The benchmark is bought at the start and held, with no costs.'],
+          ] },
+          { kind: 'p', parts: ['Expected returns are the window\'s historical mean (not ARIMA), so the backtest measures the rule rather than a forecast. ', { term: 'Annual turnover', tip: 'Sum of |Δw|/2 at each rebalance, divided by the years tested.' }, ' shows how much each strategy trades and the annual cost how much that takes away.'] },
         ],
       },
     ],

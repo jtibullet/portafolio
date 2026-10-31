@@ -4,7 +4,7 @@ import type { RiskMetrics } from './engine/riskMetrics';
 export type { Objective } from './optimization';
 export type CovarianceMethod = 'sample' | 'ledoitWolf';
 
-export type TabId = 'dashboard' | 'analytics' | 'ai' | 'validation';
+export type TabId = 'dashboard' | 'analytics' | 'backtest' | 'ai' | 'validation';
 
 /** One row of /api/historical: a date plus one adjusted close (or null) per symbol. */
 export type PriceRow = { date: string } & Record<string, number | string | null>;

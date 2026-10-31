@@ -18,6 +18,7 @@ import { WorkspaceTabs } from './components/layout/WorkspaceTabs';
 const MethodologyModal = lazy(() => import('./components/layout/MethodologyModal').then(m => ({ default: m.MethodologyModal })));
 const DashboardTab = lazy(() => import('./components/dashboard/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const AnalyticsTab = lazy(() => import('./components/analytics/AnalyticsTab').then(m => ({ default: m.AnalyticsTab })));
+const BacktestTab = lazy(() => import('./components/backtest/BacktestTab').then(m => ({ default: m.BacktestTab })));
 const AiTab = lazy(() => import('./components/ai/AiTab').then(m => ({ default: m.AiTab })));
 const ValidationTab = lazy(() => import('./components/validation/ValidationTab').then(m => ({ default: m.ValidationTab })));
 
@@ -164,6 +165,9 @@ function Workspace() {
                 mcInitialAmount={mcInitialAmount}
                 setMcInitialAmount={setMcInitialAmount}
               />
+            )}
+            {activeTab === 'backtest' && (
+              <BacktestTab historicalData={historicalData!} symbols={symbols} params={params} />
             )}
             {activeTab === 'ai' && (
               <AiTab
