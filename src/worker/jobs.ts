@@ -5,6 +5,7 @@
 import { prepareAnalysis, optimizePreparedAnalysis, type AnalysisInput } from '../engine/portfolioAnalysis';
 import { runBlackLittermanAnalysis, type BlackLittermanInput } from '../engine/blackLittermanAnalysis';
 import { runMonteCarlo } from '../monteCarlo';
+import { runBacktest, type BacktestInput } from '../engine/backtest';
 
 export async function analyzeJob(input: AnalysisInput) {
   const prepared = prepareAnalysis(input);
@@ -18,12 +19,16 @@ export interface MonteCarloInput {
   expectedReturn: number;
   volatility: number;
   years: number;
+  monthlyContribution: number;
+  goal: number;
 }
 
 export const JOBS = {
   analyze: analyzeJob,
   blackLitterman: (input: BlackLittermanInput) => runBlackLittermanAnalysis(input),
-  monteCarlo: (input: MonteCarloInput) => runMonteCarlo(input.initialAmount, input.expectedReturn, input.volatility, input.years),
+  backtest: (input: BacktestInput) => runBacktest(input),
+  monteCarlo: (input: MonteCarloInput) => runMonteCarlo(input.initialAmount, input.expectedReturn, input.volatility, input.years, 10000, 100, undefined,
+    { monthlyContribution: input.monthlyContribution, goal: input.goal }),
 };
 
 export type JobName = keyof typeof JOBS;

@@ -4,7 +4,7 @@ import type { RiskMetrics } from './engine/riskMetrics';
 export type { Objective } from './optimization';
 export type CovarianceMethod = 'sample' | 'ledoitWolf';
 
-export type TabId = 'dashboard' | 'analytics' | 'ai' | 'validation';
+export type TabId = 'dashboard' | 'analytics' | 'backtest' | 'ai' | 'validation';
 
 /** One row of /api/historical: a date plus one adjusted close (or null) per symbol. */
 export type PriceRow = { date: string } & Record<string, number | string | null>;
@@ -133,6 +133,9 @@ export interface SavedPortfolio {
   volatility: number;
   sharpeRatio: number;
   weights: number[];
+  /** Missing on portfolios saved before these were stored */
+  benchmark?: string | null;
+  currency?: 'USD' | 'CLP' | null;
 }
 
 /** User-controlled inputs that drive the analysis */
@@ -146,6 +149,8 @@ export interface PortfolioParams {
   maxWeights: WeightBounds;
   objective: Objective;
   covarianceMethod: CovarianceMethod;
+  /** Currency every price is expressed in before computing returns */
+  analysisCurrency: 'USD' | 'CLP';
 }
 
 /** Why the optimizer could not produce a portfolio; rendered as a translated message. */
@@ -156,4 +161,13 @@ export interface OptimizationFailure {
   max?: number;
   /** Ticker the failure refers to, for 'minAboveMax' */
   symbol?: string;
+}
+
+/** Inputs of the Monte Carlo projection */
+export interface MonteCarloSettings {
+  years: number;
+  initialAmount: number;
+  monthlyContribution: number;
+  /** Target final value; 0 for none */
+  goal: number;
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
-import { createPriceCache, createTtlCache, mapWithConcurrency, PRICE_TTL_MS } from './marketCache';
+import { alignRates, createPriceCache, createTtlCache, mapWithConcurrency, PRICE_TTL_MS } from './marketCache';
 
 const rows = [
   { date: '2024-01-02', adjClose: 10 },
@@ -60,5 +60,13 @@ describe('mapWithConcurrency', () => {
     });
     expect(result).toEqual([50, 10, 40, 20, 30, 0]);
     expect(peak).toBe(2);
+  });
+});
+
+describe('alignRates', () => {
+  it('carries the last rate forward and backfills the start', () => {
+    const fx = [{ date: '2024-01-03', adjClose: 900 }, { date: '2024-01-05', adjClose: 910 }];
+    expect(alignRates(['2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05', '2024-01-08'], fx)).toEqual([900, 900, 900, 910, 910]);
+    expect(alignRates(['2024-01-02'], [])).toBeNull();
   });
 });

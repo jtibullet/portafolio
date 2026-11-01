@@ -90,3 +90,20 @@ export async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (i
   await Promise.all(workers);
   return results;
 }
+
+/**
+ * One rate per date: the rate on that date or the last one before it (currencies also trade on
+ * days some markets are closed). Dates before the first quote take the first rate.
+ */
+export function alignRates(dates: string[], points: PricePoint[]): number[] | null {
+  const sorted = points.filter(p => Number.isFinite(p.adjClose) && p.adjClose > 0).sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) return null;
+  const rates: number[] = [];
+  let k = 0;
+  let current = sorted[0].adjClose;
+  for (const date of dates) {
+    while (k < sorted.length && sorted[k].date <= date) current = sorted[k++].adjClose;
+    rates.push(current);
+  }
+  return rates;
+}

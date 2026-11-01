@@ -6,7 +6,7 @@ import { createServer as createViteServer } from "vite";
 import YahooFinanceRaw from "yahoo-finance2";
 import Database from "better-sqlite3";
 import { subYears, subMonths, format } from "date-fns";
-import { createPriceCache, createTtlCache, mapWithConcurrency, type PricePoint } from "./server/marketCache";
+import { alignRates, createPriceCache, createTtlCache, mapWithConcurrency, type PricePoint } from "./server/marketCache";
 
 const YahooFinance = (YahooFinanceRaw as any).default || YahooFinanceRaw;
 const yfOptions = { validation: { logErrors: false }, suppressNotices: ['yahooSurvey'] };
@@ -21,6 +21,8 @@ const isProduction = process.env.NODE_ENV === "production" || (typeof IS_PROD_BU
 const MAX_TICKERS = 40;
 /** Parallel requests to Yahoo Finance; more risks being rate limited */
 const YAHOO_CONCURRENCY = 5;
+/** Yahoo symbol for the USD/CLP rate (CLP per USD) */
+const FX_SYMBOL = "CLP=X";
 const SYMBOL_PATTERN = /^[A-Za-z0-9.\-=^]{1,20}$/;
 
 function parseSymbols(value: unknown): string[] | null {
@@ -53,6 +55,10 @@ try {
       weights TEXT
     )
   `);
+  // Columns added later; older databases get them with NULL for the portfolios already saved
+  const columns = new Set((db.prepare("PRAGMA table_info(portfolios)").all() as { name: string }[]).map(c => c.name));
+  if (!columns.has("benchmark")) db.exec("ALTER TABLE portfolios ADD COLUMN benchmark TEXT");
+  if (!columns.has("currency")) db.exec("ALTER TABLE portfolios ADD COLUMN currency TEXT");
 } catch (err) {
   console.error("Failed to open portfolios.db; saved portfolios are disabled until it is fixed or moved aside.", err);
   db = null;
@@ -121,14 +127,16 @@ async function startServer() {
     if (!db) return res.status(503).json({ error: "Portfolio database is unavailable" });
     try {
       const { tickers, riskFreeRate, expectedReturn, volatility, sharpeRatio, weights } = req.body;
+      const benchmark = typeof req.body.benchmark === "string" && SYMBOL_PATTERN.test(req.body.benchmark) ? req.body.benchmark : null;
+      const currency = req.body.currency === "CLP" ? "CLP" : "USD";
       const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
       if (!parseSymbols(tickers) || !Array.isArray(weights) || weights.length !== tickers.length || !weights.every(isNum)
           || ![riskFreeRate, expectedReturn, volatility, sharpeRatio].every(isNum)) {
         return res.status(400).json({ error: "Invalid portfolio payload" });
       }
       const stmt = db.prepare(`
-        INSERT INTO portfolios (tickers, riskFreeRate, expectedReturn, volatility, sharpeRatio, weights)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO portfolios (tickers, riskFreeRate, expectedReturn, volatility, sharpeRatio, weights, benchmark, currency)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const info = stmt.run(
         JSON.stringify(tickers),
@@ -136,7 +144,9 @@ async function startServer() {
         expectedReturn,
         volatility,
         sharpeRatio,
-        JSON.stringify(weights)
+        JSON.stringify(weights),
+        benchmark,
+        currency
       );
       res.json({ success: true, id: info.lastInsertRowid });
     } catch (error) {
@@ -171,19 +181,29 @@ async function startServer() {
       if (!tickers || typeof benchmark !== "string" || !SYMBOL_PATTERN.test(benchmark)) {
         return res.status(400).json({ error: `Provide 1-${MAX_TICKERS} valid tickers and a valid benchmark` });
       }
-      if (!Number.isInteger(horizonYears) || horizonYears < 1 || horizonYears > 20) {
+      // Either a horizon in years or an explicit start date (used to track saved portfolios)
+      const requestedStart = typeof req.body.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.startDate)
+        ? new Date(`${req.body.startDate}T00:00:00Z`) : null;
+      if (!requestedStart && (!Number.isInteger(horizonYears) || horizonYears < 1 || horizonYears > 20)) {
         return res.status(400).json({ error: "horizonYears must be an integer between 1 and 20" });
+      }
+      if (requestedStart && (isNaN(requestedStart.getTime()) || requestedStart > new Date() || requestedStart < subYears(new Date(), 20))) {
+        return res.status(400).json({ error: "startDate must be within the last 20 years" });
       }
       
       const allSymbols = Array.from(new Set([...tickers, benchmark]));
       
       const endDate = new Date();
-      const startDate = subYears(endDate, horizonYears);
+      const startDate = requestedStart ?? subYears(endDate, horizonYears);
       
       const period1 = format(startDate, "yyyy-MM-dd");
       const period2 = format(endDate, "yyyy-MM-dd");
 
-      const histories = await mapWithConcurrency(allSymbols, YAHOO_CONCURRENCY, symbol => fetchDailyHistory(symbol, period1, period2));
+      // The USD/CLP history (CLP per USD) comes along so the client can convert between currencies
+      const [histories, fxHistory] = await Promise.all([
+        mapWithConcurrency(allSymbols, YAHOO_CONCURRENCY, symbol => fetchDailyHistory(symbol, period1, period2)),
+        fetchDailyHistory(FX_SYMBOL, period1, period2),
+      ]);
       const results: Record<string, PricePoint[]> = {};
       allSymbols.forEach((symbol, i) => { if (histories[i]) results[symbol] = histories[i]!; });
       
@@ -221,7 +241,7 @@ async function startServer() {
 
       const failedSymbols = allSymbols.filter(s => !successfulSymbols.includes(s as string));
 
-      res.json({ data, symbols: successfulSymbols, failedSymbols });
+      res.json({ data, symbols: successfulSymbols, failedSymbols, fx: fxHistory ? alignRates(sortedDates, fxHistory) : null });
     } catch (error) {
       console.error("Historical data error:", error);
       res.status(500).json({ error: "Failed to fetch historical data" });

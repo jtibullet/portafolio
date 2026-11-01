@@ -7,7 +7,7 @@ import type { ARIMA_Forecast, AlphaSignalResult } from '../utils/quantMath';
 import type { MarketDataState } from './useMarketData';
 import { useI18n } from '../i18n';
 import type {
-  AssetMetadata, BlackLittermanStats, InvestorView, OptimizationFailure, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
+  AssetMetadata, BlackLittermanStats, InvestorView, MonteCarloSettings, OptimizationFailure, PortfolioParams, QuantStats, Recommendations, SavedPortfolio,
 } from '../types';
 
 /** Wait this long after the last slider/input change before recomputing */
@@ -97,10 +97,17 @@ export function useBlackLitterman(
   const { selectedBenchmark, riskFreeRate, minWeights, maxWeights } = params;
   const historicalData = marketData?.historicalData || null;
   const debouncedViews = useDebouncedValue(views, INPUT_DEBOUNCE_MS);
-  // Market capitalization (fund assets for ETFs) of each asset, for the implied prior
+  // Market capitalization (fund assets for ETFs) of each asset in USD, for the implied prior.
+  // Yahoo reports Chilean (.SN) caps in CLP; without a rate they can't be compared, so they count as missing.
+  const lastRate = marketData?.fx?.[marketData.fx.length - 1] ?? null;
   const marketCaps = useMemo(
-    () => quantStats?.matrixSymbols.map(sym => { const m = metadata?.find(x => x.symbol === sym); return m?.marketCap || m?.totalAssets || null; }) ?? [],
-    [quantStats, metadata],
+    () => quantStats?.matrixSymbols.map(sym => {
+      const m = metadata?.find(x => x.symbol === sym);
+      const cap = m?.marketCap || m?.totalAssets || null;
+      if (cap === null || !sym.endsWith('.SN')) return cap;
+      return lastRate ? cap / lastRate : null;
+    }) ?? [],
+    [quantStats, metadata, lastRate],
   );
 
   useEffect(() => {
@@ -116,21 +123,20 @@ export function useBlackLitterman(
 }
 
 /** Monte Carlo projection of the optimal portfolio; only computed while its tab is visible. */
-export function useMonteCarlo(enabled: boolean, quantStats: QuantStats | null, years: number, initialAmount: number) {
+export function useMonteCarlo(enabled: boolean, quantStats: QuantStats | null, settings: MonteCarloSettings) {
   const [mcResult, setMcResult] = useState<MonteCarloResult | null>(null);
-  const debouncedAmount = useDebouncedValue(initialAmount, INPUT_DEBOUNCE_MS);
-  const debouncedYears = useDebouncedValue(years, INPUT_DEBOUNCE_MS);
+  const debounced = useDebouncedValue(settings, INPUT_DEBOUNCE_MS);
 
   useEffect(() => {
     const optimal = quantStats?.optimization?.optimal;
     if (!enabled || !optimal) return;
     let cancelled = false;
     setMcResult(null);
-    runJob('monteCarlo', { initialAmount: debouncedAmount, expectedReturn: optimal.expectedReturn, volatility: optimal.volatility, years: debouncedYears })
+    runJob('monteCarlo', { ...debounced, expectedReturn: optimal.expectedReturn, volatility: optimal.volatility })
       .then(result => { if (!cancelled) setMcResult(result); })
       .catch(err => console.error('Monte Carlo failed', err));
     return () => { cancelled = true; };
-  }, [enabled, quantStats, debouncedYears, debouncedAmount]);
+  }, [enabled, quantStats, debounced]);
 
   return mcResult;
 }
@@ -179,7 +185,7 @@ export function useSavedPortfolios() {
     refresh().catch(err => console.error('Failed to fetch portfolios', err));
   }, [refresh]);
 
-  const savePortfolio = useCallback(async (quantStats: QuantStats, riskFreeRate: number) => {
+  const savePortfolio = useCallback(async (quantStats: QuantStats, params: PortfolioParams) => {
     if (!quantStats.optimization) return;
     const { optimal } = quantStats.optimization;
     setSaving(true);
@@ -189,7 +195,9 @@ export function useSavedPortfolios() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tickers: quantStats.matrixSymbols,
-          riskFreeRate,
+          riskFreeRate: params.riskFreeRate,
+          benchmark: params.selectedBenchmark,
+          currency: params.analysisCurrency,
           expectedReturn: optimal.expectedReturn,
           volatility: optimal.volatility,
           sharpeRatio: optimal.sharpeRatio,

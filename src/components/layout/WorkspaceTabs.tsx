@@ -6,6 +6,7 @@ import type { TabId } from '../../types';
 const TABS: { id: TabId; label: MessageKey }[] = [
   { id: 'dashboard', label: 'tabs.dashboard' },
   { id: 'analytics', label: 'tabs.analytics' },
+  { id: 'backtest', label: 'tabs.backtest' },
   { id: 'ai', label: 'tabs.ai' },
   { id: 'validation', label: 'tabs.validation' },
 ];

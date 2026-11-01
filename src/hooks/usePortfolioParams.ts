@@ -14,6 +14,7 @@ export function usePortfolioParams() {
   const [objective, setObjective] = useState<Objective>('maxSharpe');
   // Shrinkage is the safer default: sample covariances are noisy and the optimizer amplifies the noise
   const [covarianceMethod, setCovarianceMethod] = useState<CovarianceMethod>('ledoitWolf');
+  const [analysisCurrency, setAnalysisCurrency] = useState<'USD' | 'CLP'>('USD');
 
   /** Adds a ticker (uppercased); empty or duplicate input is ignored. */
   const addTicker = (ticker: string): 'added' | 'limit' | 'ignored' => {
@@ -28,13 +29,13 @@ export function usePortfolioParams() {
 
   // Stable identity so memoized children only re-render when an input actually changes
   const params: PortfolioParams = useMemo(() => ({
-    selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod,
-  }), [selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod]);
+    selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod, analysisCurrency,
+  }), [selectedTickers, selectedBenchmark, horizonYears, riskFreeRate, useArimaForecast, minWeights, maxWeights, objective, covarianceMethod, analysisCurrency]);
 
   return {
     params,
     setSelectedTickers, setSelectedBenchmark, setHorizonYears, setRiskFreeRate, setUseArimaForecast,
-    setMinWeights, setMaxWeights, setObjective, setCovarianceMethod, addTicker, removeTicker,
+    setMinWeights, setMaxWeights, setObjective, setCovarianceMethod, setAnalysisCurrency, addTicker, removeTicker,
   };
 }
 

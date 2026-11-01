@@ -4,6 +4,7 @@ export const HORIZON_OPTIONS = [
   { label: '1 Year', value: 1 },
   { label: '3 Years', value: 3 },
   { label: '5 Years', value: 5 },
+  { label: '10 Years', value: 10 },
 ];
 export const MAX_ASSETS = 30;
 

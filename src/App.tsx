@@ -1,12 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, BarChart2, Loader2 } from 'lucide-react';
-import { useMarketData, type AppError } from './hooks/useMarketData';
+import { useMarketData, type AppError, type MarketDataState } from './hooks/useMarketData';
+import { convertPrices } from './engine/currency';
 import { usePortfolioParams } from './hooks/usePortfolioParams';
 import { useExchangeRate, useMetadata, useSentiment } from './hooks/useRemoteData';
 import {
   usePortfolioAnalysis, useInvestorViews, useBlackLitterman, useMonteCarlo, useRecommendations, useSavedPortfolios,
 } from './hooks/usePortfolioAnalysis';
 import { useTheme } from './hooks/useTheme';
+import { usePersistentState } from './hooks/usePersistentState';
 import { UiStateProvider } from './hooks/useUiState';
 import { I18nProvider, useI18n } from './i18n';
 import { warmUpWorker } from './worker/client';
@@ -18,6 +20,7 @@ import { WorkspaceTabs } from './components/layout/WorkspaceTabs';
 const MethodologyModal = lazy(() => import('./components/layout/MethodologyModal').then(m => ({ default: m.MethodologyModal })));
 const DashboardTab = lazy(() => import('./components/dashboard/DashboardTab').then(m => ({ default: m.DashboardTab })));
 const AnalyticsTab = lazy(() => import('./components/analytics/AnalyticsTab').then(m => ({ default: m.AnalyticsTab })));
+const BacktestTab = lazy(() => import('./components/backtest/BacktestTab').then(m => ({ default: m.BacktestTab })));
 const AiTab = lazy(() => import('./components/ai/AiTab').then(m => ({ default: m.AiTab })));
 const ValidationTab = lazy(() => import('./components/validation/ValidationTab').then(m => ({ default: m.ValidationTab })));
 
@@ -28,7 +31,7 @@ function usePreloadResults() {
     import('./components/dashboard/DashboardTab');
   }, []);
 }
-import type { OptimizationFailure, TabId } from './types';
+import type { MonteCarloSettings, OptimizationFailure, TabId } from './types';
 
 function Banner({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -78,6 +81,20 @@ function ResultsSkeleton() {
   );
 }
 
+/**
+ * Market data with every price in the analysis currency. Without a rate history, assets in the
+ * other currency stay in their own and `fxMissing` is set so the user is told.
+ */
+function useAnalysisData(marketData: MarketDataState | null, currency: 'USD' | 'CLP') {
+  return useMemo(() => {
+    if (!marketData) return { analysisData: null, fxMissing: false };
+    const converted = convertPrices(marketData.historicalData, marketData.symbols, marketData.fx, currency);
+    return converted
+      ? { analysisData: converted === marketData.historicalData ? marketData : { ...marketData, historicalData: converted }, fxMissing: false }
+      : { analysisData: marketData, fxMissing: true };
+  }, [marketData, currency]);
+}
+
 function Workspace() {
   usePreloadResults();
   const { t, f, years } = useI18n();
@@ -86,22 +103,22 @@ function Workspace() {
   const { params } = controls;
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [showMethodology, setShowMethodology] = useState(false);
-  const [mcYears, setMcYears] = useState(5);
-  const [mcInitialAmount, setMcInitialAmount] = useState(100000);
+  const [mcSettings, setMcSettings] = usePersistentState<MonteCarloSettings>('mc:settings', { years: 5, initialAmount: 100000, monthlyContribution: 0, goal: 0 });
 
   const { data: marketData, isLoading: isFetching, error, fetchData } = useMarketData();
   const { exchangeRate, rateLoading } = useExchangeRate();
   const { metadata, metadataLoading } = useMetadata(params.selectedTickers, params.selectedBenchmark);
   const { sentimentData, sentimentLoading } = useSentiment(params.selectedTickers, activeTab === 'ai');
 
-  const { quantStats, isOptimizing, optimizationError, arimaForecasts, alphaSignals } = usePortfolioAnalysis(marketData, params);
+  const { analysisData, fxMissing } = useAnalysisData(marketData, params.analysisCurrency);
+  const { quantStats, isOptimizing, optimizationError, arimaForecasts, alphaSignals } = usePortfolioAnalysis(analysisData, params);
   const [views, setViews] = useInvestorViews(quantStats);
-  const blStats = useBlackLitterman(quantStats, views, marketData, params, metadata);
-  const mcResult = useMonteCarlo(activeTab === 'analytics', quantStats, mcYears, mcInitialAmount);
+  const blStats = useBlackLitterman(quantStats, views, analysisData, params, metadata);
+  const mcResult = useMonteCarlo(activeTab === 'analytics', quantStats, mcSettings);
   const { recommendations, isLoading: recommendationsLoading } = useRecommendations(quantStats, params.riskFreeRate, params.selectedTickers);
   const { savedPortfolios, saving, savePortfolio } = useSavedPortfolios();
   const optimizationMessage = useOptimizationMessage(optimizationError);
-  const handleSave = useCallback(() => { if (quantStats) savePortfolio(quantStats, params.riskFreeRate); }, [quantStats, savePortfolio, params.riskFreeRate]);
+  const handleSave = useCallback(() => { if (quantStats) savePortfolio(quantStats, params); }, [quantStats, savePortfolio, params]);
 
   const dataLoading = isFetching || isOptimizing;
   const historicalData = marketData?.historicalData || null;
@@ -123,6 +140,7 @@ function Workspace() {
         <WorkspaceTabs activeTab={activeTab} onChange={setActiveTab} exchangeRate={exchangeRate} rateLoading={rateLoading} />
 
         {error && <Banner title={t('error.label')}>{errorText(error)}</Banner>}
+        {fxMissing && <Banner title={t('error.label')}>{t('error.fxMissing')}</Banner>}
         {optimizationMessage && <Banner title={t('error.optimizationLabel')}>{optimizationMessage}</Banner>}
 
         {dataLoading && (
@@ -145,6 +163,7 @@ function Workspace() {
               <DashboardTab
                 quantStats={quantStats!}
                 metadata={metadata}
+                exchangeRate={exchangeRate}
                 params={params}
                 isOptimizing={isOptimizing}
                 savedPortfolios={savedPortfolios}
@@ -159,11 +178,13 @@ function Workspace() {
                 views={views}
                 setViews={setViews}
                 mcResult={mcResult}
-                mcYears={mcYears}
-                setMcYears={setMcYears}
-                mcInitialAmount={mcInitialAmount}
-                setMcInitialAmount={setMcInitialAmount}
+                mcSettings={mcSettings}
+                currency={params.analysisCurrency}
+                setMcSettings={setMcSettings}
               />
+            )}
+            {activeTab === 'backtest' && (
+              <BacktestTab historicalData={analysisData!.historicalData} symbols={symbols} params={params} />
             )}
             {activeTab === 'ai' && (
               <AiTab
